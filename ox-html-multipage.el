@@ -158,11 +158,10 @@ Return info for further processing."
 	   ;; Call parse tree filters.
 	   (setq tree (org-export-filter-apply-functions
                        (plist-get info :filter-parse-tree) tree info))
-           ;;           (setq global-tree1 (org-remove-subheadlines tree))
 	   ;; Now tree is complete, compute its properties and add them
 	   ;; to communication channel.
 	   (setq info (org-export--collect-tree-properties tree info))
-           (setq global-tree tree)
+           (setq global-tree tree)  ;;; for debugging purposes, remove later
            ;; Process citations and bibliography.  Replace each citation
 	   ;; and "print_bibliography" keyword in the parse tree with
 	   ;; the output of the selected citation export processor.
@@ -170,8 +169,6 @@ Return info for further processing."
            (org-cite-process-bibliography info)
 	   ;; Eventually transcode TREE.  Wrap the resulting string into
 	   ;; a template.
-;;;           (plist-put info :parse-tree (car (nth 0 (plist-get info :headline-numbering))))
-           (setq global-info info)
            info))))))
 
 (defun org-export--transcode-headline (headline info)
@@ -253,7 +250,7 @@ Return code as a string."
 
 (defun string-to-backend-filename (string extension)
    (format
-    "%s.%s"
+    "%s%s"
     (remove-chars
      '("(" ")" "," ";" "{" "}" "'" "\\")
      (replace-chars-with-dash
@@ -272,18 +269,28 @@ required."
    finally (return result)))
 
 (defun org-export--make-section-url-lookup (headline-numbering extension)
-  "for all headline-numbers create an assoc-list entry with the
-title and a filename"
-  (cl-loop
-   for entry
-   in headline-numbering
-   collect (let* ((headline-numbers (cdr entry))
-                  (title (org-element-property :raw-value (car entry)))
-                  (filename (string-prepend-chapters
-                             (string-to-backend-filename title extension)
-                             headline-numbers
-                             org-export-headline-levels)))
-             (list headline-numbers title filename))))
+  "for all headline-numbers create an assoc-list entry with a plist containing entries for the section and its navigation."
+    (cl-loop
+     for curr-entry on headline-numbering
+     for next = (cadr curr-entry)
+     for prev-title = nil then curr-title
+     for curr-title = (org-element-property :raw-value (caar curr-entry)) then next-title
+     for next-title = (org-element-property :raw-value (car next))
+     for prev-url = nil then curr-url
+     for curr-url = (string-prepend-chapters
+                     (string-to-backend-filename curr-title extension)
+                     (cdar curr-entry)
+                     org-export-headline-levels)
+     then next-url 
+     for next-url = (and next
+                        (string-prepend-chapters
+                         (string-to-backend-filename next-title extension)
+                         (cdr next)
+                         org-export-headline-levels))
+     collect (list (cdar curr-entry)
+                   :section-title curr-title :section-url curr-url
+                   :section-title-next next-title :section-url-next next-url
+                   :section-title-prev prev-title :section-url-prev prev-url)))
 
 (defun org-export--collect-multipage-tree-properties (info)
   (org-combine-plists
@@ -293,22 +300,22 @@ title and a filename"
           (plist-get info :headline-numbering)
           (plist-get info :file-extension)))))
 
-(defun get-link-headline-number (link info)
-  "return the headline-numbering from given link element. This
+(defun org-export--get-headline-number (element info)
+  "return the headline-numbering from given element. This
 requires that :headline-numbering has already been added to info
 (done in org-export--collect-tree-properties)."
   (let* ((headline-numbering (plist-get info :headline-numbering))
-         (elem link)
+         (elem element)
          (headline-number (alist-get headline-numbering elem)))
     (while (and elem (not headline-number))
       (setf elem (org-element-property :parent elem))
-      (setq headline-number (alist-get headline-numbering elem)))
+      (setq headline-number (alist-get elem headline-numbering)))
     headline-number))
 
 (defun get-headline-from-link-name (name tree info)
   "utility function to obtain the headline-numbering from a supplied
 link name in tree."
-  (get-link-headline-number
+  (org-element--get-headline-number
    (org-export-resolve-fuzzy-link
     (org-element-map tree 'link
       (lambda (link)
@@ -389,7 +396,10 @@ The function returns either a file name returned by POST-PROCESS,
 or DIR."
   (declare (indent 2))
   (if (not (file-writable-p dir)) (error "Output dir not writable")
-    (let* ((ext-plist (org-combine-plists `(:output-dir ,dir :file-extension ,extension) ext-plist))
+    (let* ((ext-plist (org-combine-plists `(:output-dir ,dir
+                                                        :file-extension ,extension
+                                                        :multipage t)
+                                          ext-plist))
 	   (encoding (or org-export-coding-system buffer-file-coding-system))
            (info ;;; NEW: add a multipage processing hook returning an updated info plist.                  
             (org-export--collect-multipage-tree-properties
@@ -410,10 +420,11 @@ or DIR."
                            headline-numbering))
            (section-filenames (mapcar
                                (lambda (headline-number)
-                                 (nth 1
-                                      (alist-get
-                                       (cdr headline-number)
-                                       section-url-lookup)))
+                                 (plist-get
+                                  (alist-get
+                                   (cdr headline-number)
+                                   section-url-lookup)
+                                  :section-url))
                                headline-numbering)))
       ;;; add the section subtrees to :headline-numbering, necessary
       ;;; to make the headline-numbering accessible when generating
@@ -422,6 +433,7 @@ or DIR."
                  (append
                   headline-numbering
                   (reverse subtree-headline-numbering)))
+      (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
        for file in section-filenames
        for tree in section-trees
@@ -525,11 +537,14 @@ of contents as a string, or nil if it is empty."
 
 ;;; multipage definition:
 
-(defun org-html--get-multipage-url (headline info)
-  (caddr (assq (cdr (assq headline (plist-get info :headline-numbering)))
-               (plist-get info :section-url-lookup))))
+(defun org-html--get-multipage-url (element info)
+  (plist-get
+   (alist-get
+       (org-export--get-headline-number element info)
+       (plist-get info :section-url-lookup))
+   :section-url))
 
-(defun org-html--format-multipage-toc-headline (headline info)
+(defun org-html--format-toc-headline (headline info)
   "Return an appropriate table of contents entry for HEADLINE.
 INFO is a plist used as a communication channel."
   (let* ((headline-number (org-export-get-headline-number headline info))
@@ -545,9 +560,15 @@ INFO is a plist used as a communication channel."
 		info))
 	 (tags (and (eq (plist-get info :with-tags) t)
 		    (org-export-get-tags headline info))))
-    (format "<a href=\"./%s\">%s</a>"
-	    ;; Label.
-            (org-html--get-multipage-url headline info)
+    (format "<a href=\"%s\">%s</a>"
+            ;; Label
+            (if (plist-get info :multipage)
+                (format "%s" (plist-get
+                              (alist-get
+                               headline-number
+                               (plist-get info :section-url-lookup))
+                              :section-url))
+              (format "#%s" (org-html--reference headline info)))
 	    ;; Body.
 	    (concat
 	     (and (not (org-export-low-level-p headline info))
@@ -556,32 +577,3 @@ INFO is a plist used as a communication channel."
 			  ". "))
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
-
-
-(defun org-html-toc (depth info &optional scope)
-  "Build a table of contents.
-DEPTH is an integer specifying the depth of the table.  INFO is
-a plist used as a communication channel.  Optional argument SCOPE
-is an element defining the scope of the table.  Return the table
-of contents as a string, or nil if it is empty."
-  (let ((toc-entries
-	 (mapcar (lambda (headline)
-		   (cons (org-html--format-multipage-toc-headline headline info)
-			 (org-export-get-relative-level headline info)))
-		 (org-export-collect-headlines info depth scope))))
-    (when toc-entries
-      (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
-			 (org-html--toc-text toc-entries)
-			 "</div>\n")))
-	(if scope toc
-	  (let ((outer-tag (if (org-html--html5-fancy-p info)
-			       "nav"
-			     "div")))
-	    (concat (format "<%s id=\"table-of-contents\" role=\"doc-toc\">\n" outer-tag)
-		    (let ((top-level (plist-get info :html-toplevel-hlevel)))
-		      (format "<h%d>%s</h%d>\n"
-			      top-level
-			      (org-html--translate "Table of Contents" info)
-			      top-level))
-		    toc
-		    (format "</%s>\n" outer-tag))))))))

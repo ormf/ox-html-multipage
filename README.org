@@ -14,6 +14,12 @@
 
    First attempt to extend org-html-export with multipage support. The
    code has been developed on top of org 9.6.15
+
+   Note that the code is in development and currently destructively
+   modifies code of the html backend it is based on. This will be
+   fixed as soon as the code gets finalized. When running this code,
+   single page html export will stop working until you have reloaded
+   ox-html.el
    
 ** Installation
 
