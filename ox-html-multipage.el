@@ -181,7 +181,7 @@ backend and return the string."
 	 (full-body (org-export-filter-apply-functions
 		     (plist-get info :filter-body)
 		     (if (not (functionp inner-template)) body
-		       (funcall inner-template body info))
+                         (funcall inner-template body info headline))
 		     info))
 	 (template (cdr (assq 'template
 			      (plist-get info :translate-alist))))
@@ -417,15 +417,21 @@ or DIR."
              (org-export--collect-tree-info ;;; here everything happens!!!
               backend subtreep visible-only body-only ext-plist)))
            (headline-numbering (plist-get info :headline-numbering))
-           (subtree-headline-numbering
+           ;; each entry in headline-numbering will become a single
+           ;; page in multipage output. We first generate a new
+           ;; headline-numbering with each entry being a copy of the
+           ;; original enries with removed subheadlines.
+           (stripped-section-headline-numbering
             (mapcar
              (lambda (section-entry)
                (cons (org-remove-subheadlines
                       (car section-entry))
                      (cdr section-entry)))
              headline-numbering))
+           ;; section-trees is a list of all sections which get
+           ;; exported to a single page
+           (section-trees (mapcar 'car stripped-section-headline-numbering))
            (section-url-lookup (plist-get info :section-url-lookup))
-           (section-trees (mapcar 'car subtree-headline-numbering))
            (section-filenames (mapcar
                                (lambda (headline-number)
                                  (plist-get
@@ -434,13 +440,13 @@ or DIR."
                                    section-url-lookup)
                                   :section-url))
                                headline-numbering)))
-      ;;; add the section subtrees to :headline-numbering, necessary
-      ;;; to make the headline-numbering accessible when generating
-      ;;; the body of the individual pages.
+      ;; add stripped-section-headline-numbering to
+      ;; :headline-numbering, to make the headline-numbering
+      ;; accessible when generating the body of the individual pages.
       (plist-put info :headline-numbering
                  (append
                   headline-numbering
-                  subtree-headline-numbering))
+                  stripped-section-headline-numbering))
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
        for file in section-filenames
@@ -567,6 +573,74 @@ targets and targets."
                   (org-export-get-reference datum info))
         (format "#%s" (org-export-get-reference datum info)))))))
 
+(defun org-html-footnote-reference (footnote-reference _contents info)
+  "Transcode a FOOTNOTE-REFERENCE element from Org to HTML.
+CONTENTS is nil.  INFO is a plist holding contextual information."
+  (concat
+   ;; Insert separator between two footnotes in a row.
+   (let ((prev (org-export-get-previous-element footnote-reference info)))
+     (when (eq (org-element-type prev) 'footnote-reference)
+       (plist-get info :html-footnote-separator)))
+   (let* ((n (org-export-get-footnote-number footnote-reference info))
+	  (id (format "fnr.%d%s"
+		      n
+		      (if (org-export-footnote-first-reference-p
+			   footnote-reference info)
+			  ""
+			".100"))))
+     (format
+      (plist-get info :html-footnote-format)
+
+      (org-html--anchor
+       id n
+       ;;; we probably don't need this as footnotes are *always* on
+       ;;; the same page as the reference. It's enough to make sure,
+       ;;; footnotes are only appearing on the page where they are
+       ;;; referenced.
+       (if (plist-get info :multipage)
+           (format " class=\"footref\" href=\"%s#fn.%d\" role=\"doc-backlink\""
+                   (org-html--get-multipage-url footnote-reference info) n)
+         (format " class=\"footref\" href=\"ui#fn.%d\" role=\"doc-backlink\"" n))
+       info)))))
+
+;;; we need data in the function args for multipage.
+
+(defun org-html-footnote-section (info &optional data)
+  "Format the footnote section.
+INFO is a plist used as a communication channel."
+  (pcase (org-export-collect-footnote-definitions info data)
+    (`nil nil)
+    (definitions
+      (format
+       (plist-get info :html-footnotes-section)
+       (org-html--translate "Footnotes" info)
+       (format
+	"\n%s\n"
+	(mapconcat
+	 (lambda (definition)
+	   (pcase definition
+	     (`(,n ,_ ,def)
+	      ;; `org-export-collect-footnote-definitions' can return
+	      ;; two kinds of footnote definitions: inline and blocks.
+	      ;; Since this should not make any difference in the HTML
+	      ;; output, we wrap the inline definitions within
+	      ;; a "footpara" class paragraph.
+	      (let ((inline? (not (org-element-map def org-element-all-elements
+				    #'identity nil t)))
+		    (anchor (org-html--anchor
+			     (format "fn.%d" n)
+			     n
+			     (format " class=\"footnum\" href=\"#fnr.%d\" role=\"doc-backlink\"" n)
+			     info))
+		    (contents (org-trim (org-export-data def info))))
+		(format "<div class=\"footdef\">%s %s</div>\n"
+			(format (plist-get info :html-footnote-format) anchor)
+			(format "<div class=\"footpara\" role=\"doc-footnote\">%s</div>"
+				(if (not inline?) contents
+				  (format "<p class=\"footpara\">%s</p>"
+					  contents))))))))
+	 definitions
+	 "\n"))))))
 
 (defun org-html-link (link desc info)
   "Transcode a LINK object from Org to HTML.
@@ -792,3 +866,55 @@ INFO is a plist used as a communication channel."
 			  ". "))
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
+
+(defun org-html-footnote-section (info &optional data)
+  "Format the footnote section.
+INFO is a plist used as a communication channel."
+  (pcase (org-export-collect-footnote-definitions info data)
+    (`nil nil)
+    (definitions
+      (format
+       (plist-get info :html-footnotes-section)
+       (org-html--translate "Footnotes" info)
+       (format
+	"\n%s\n"
+	(mapconcat
+	 (lambda (definition)
+	   (pcase definition
+	     (`(,n ,_ ,def)
+	      ;; `org-export-collect-footnote-definitions' can return
+	      ;; two kinds of footnote definitions: inline and blocks.
+	      ;; Since this should not make any difference in the HTML
+	      ;; output, we wrap the inline definitions within
+	      ;; a "footpara" class paragraph.
+	      (let ((inline? (not (org-element-map def org-element-all-elements
+				    #'identity nil t)))
+		    (anchor (org-html--anchor
+			     (format "fn.%d" n)
+			     n
+			     (format " class=\"footnum\" href=\"#fnr.%d\" role=\"doc-backlink\"" n)
+			     info))
+		    (contents (org-trim (org-export-data def info))))
+		(format "<div class=\"footdef\">%s %s</div>\n"
+			(format (plist-get info :html-footnote-format) anchor)
+			(format "<div class=\"footpara\" role=\"doc-footnote\">%s</div>"
+				(if (not inline?) contents
+				  (format "<p class=\"footpara\">%s</p>"
+					  contents))))))))
+	 definitions
+	 "\n"))))))
+
+(defun org-html-inner-template (contents info &optional data)
+  "Return body of document string after HTML conversion.
+CONTENTS is the transcoded contents string.  INFO is a plist
+holding export options."
+  (concat
+   ;; Table of contents.
+   (let ((depth (plist-get info :with-toc)))
+     (when depth (org-html-toc depth info)))
+   ;; Document contents.
+   contents
+   ;; Footnotes section.
+   (org-html-footnote-section info data)))
+
+
