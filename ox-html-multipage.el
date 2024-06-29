@@ -302,6 +302,8 @@ its navigation."
     url-lookup))
 
 (defun org-export--collect-multipage-tree-properties (info)
+  "add :section-url-lookup entry to info. INFO is used as communication
+channel."
   (org-combine-plists
    info
    (list :section-url-lookup
@@ -414,19 +416,16 @@ or DIR."
             (org-export--collect-multipage-tree-properties
              (org-export--collect-tree-info ;;; here everything happens!!!
               backend subtreep visible-only body-only ext-plist)))
-           (subtree-headline-numbering '())
            (headline-numbering (plist-get info :headline-numbering))
+           (subtree-headline-numbering
+            (mapcar
+             (lambda (section-entry)
+               (cons (org-remove-subheadlines
+                      (car section-entry))
+                     (cdr section-entry)))
+             headline-numbering))
            (section-url-lookup (plist-get info :section-url-lookup))
-           (section-trees (mapcar
-                           (lambda (section-entry)
-                             (let ((subtree
-                                    (org-remove-subheadlines
-                                     (car section-entry))))
-                               (push
-                                (cons subtree (cdr section-entry))
-                                subtree-headline-numbering)
-                               subtree))
-                           headline-numbering))
+           (section-trees (mapcar 'car subtree-headline-numbering))
            (section-filenames (mapcar
                                (lambda (headline-number)
                                  (plist-get
@@ -441,7 +440,7 @@ or DIR."
       (plist-put info :headline-numbering
                  (append
                   headline-numbering
-                  (reverse subtree-headline-numbering)))
+                  subtree-headline-numbering))
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
        for file in section-filenames
