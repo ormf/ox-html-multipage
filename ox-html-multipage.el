@@ -3,7 +3,7 @@
 ;;; changes in ox.el to generalize exporting to multipage output.
 ;;;
 ;;; The body of `org-export-as' is split into two external functions,
-;;; which can get used as components by other backends.
+;;; which can get used as components by other backends:
 ;;;
 ;;; 1. `org-export--collect-tree-info' collects the complete
 ;;;    parse-tree plus necessary information into the info proplist.
@@ -241,8 +241,6 @@ Return code as a string."
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(require 'f)
-
 (defun replace-chars-with-dash (chars string)
   (cl-reduce (lambda (accum x) (replace-regexp-in-string (format "%s+" x) "-" accum))
            chars
@@ -342,6 +340,14 @@ copied into it with the :parent property removed in the top node."
     (if remove-parent (cl-remf props :parent))
     (apply 'org-element-adopt-elements new new-children)))
 
+(defun write-string-to-file (string encoding filename)
+  (let ((coding-system-for-write 'binary)
+        (write-region-annotate-functions nil)
+        (write-region-post-annotation-function nil))
+    (write-region (encode-coding-string string encoding)
+                  nil filename nil :silent)
+    nil))
+
 (defun org-export-multipage-to-dir
     (backend dir &optional async subtreep visible-only body-only ext-plist
 	     post-process)
@@ -426,12 +432,12 @@ or DIR."
              `(let ((output (org-export--transcode-headline tree info))
                     (file (format "%s/%s" dir file)))
                 (message "writing '%s'" file)
-                (f-write-text output encoding file)
+                (write-string-to-file output encoding file)
                 (or (ignore-errors (funcall ',post-process ,file)) ,file)))
          (let ((output (org-export--transcode-headline tree info))
                (file (format "%s/%s" dir file)))
            (message "writing '%s'" file)
-           (f-write-text output encoding file)
+           (write-string-to-file output encoding file)
            (when (and (org-export--copy-to-kill-ring-p) (org-string-nw-p output))
              (org-kill-new output))
            ;; Get proper return value.

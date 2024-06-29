@@ -15,15 +15,9 @@
    First attempt to extend org-html-export with multipage support. The
    code has been developed on top of org 9.6.15
    
-** Dependencies
-
-   - [[https://github.com/rejeep/f.el][f.el]]
-
 ** Installation
 
    in emacs
-
-   =M-x package-install f=
 
    =(load "ox-html-multipage.el")=
 
