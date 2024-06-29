@@ -1,0 +1,35 @@
+* ox-multipage-html
+
+** Author
+
+   Orm Finnendahl (c) 2024
+
+** License
+
+   GPL 2.0 see the file LICENSE
+
+   Use at own risk, no warranties whatsoever
+   
+** Overview
+
+   First attempt to extend org-html-export with multipage support
+
+   
+** Dependencies
+
+   - [[https://github.com/rejeep/f.el][f.el]]
+
+** Installation
+
+   in emacs
+
+   =M-x package-install f=
+
+   =(load "ox-html-multipage.el")=
+
+   Switch to an org buffer to export
+
+   Before exporting ensure that a subfolder named "html" in the source
+   folder of the org document exists (create it if it doesn't exist).
+
+   =M-x eval-expression <Return> (org-html-export-to-multipage-html) <Return>=
