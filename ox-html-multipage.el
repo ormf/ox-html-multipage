@@ -269,28 +269,37 @@ required."
    finally (return result)))
 
 (defun org-export--make-section-url-lookup (headline-numbering extension)
-  "for all headline-numbers create an assoc-list entry with a plist containing entries for the section and its navigation."
-    (cl-loop
-     for curr-entry on headline-numbering
-     for next = (cadr curr-entry)
-     for prev-title = nil then curr-title
-     for curr-title = (org-element-property :raw-value (caar curr-entry)) then next-title
-     for next-title = (org-element-property :raw-value (car next))
-     for prev-url = nil then curr-url
-     for curr-url = (string-prepend-chapters
-                     (string-to-backend-filename curr-title extension)
-                     (cdar curr-entry)
-                     org-export-headline-levels)
-     then next-url 
-     for next-url = (and next
-                        (string-prepend-chapters
-                         (string-to-backend-filename next-title extension)
-                         (cdr next)
-                         org-export-headline-levels))
-     collect (list (cdar curr-entry)
-                   :section-title curr-title :section-url curr-url
-                   :section-title-next next-title :section-url-next next-url
-                   :section-title-prev prev-title :section-url-prev prev-url)))
+  "Return an assoc-list containing entries for all headline-numbers
+with a plist containing title and url entries for the section and
+its navigation."
+  (let ((url-lookup
+         (cl-loop
+          for curr-entry on headline-numbering
+          for next = (cadr curr-entry)
+          for prev-title = nil then curr-title
+          for curr-title = (org-element-property :raw-value (caar curr-entry)) then next-title
+          for next-title = (org-element-property :raw-value (car next))
+          for prev-url = nil then curr-url
+          for curr-url = (string-prepend-chapters
+                          (string-to-backend-filename curr-title extension)
+                          (cdar curr-entry)
+                          org-export-headline-levels)
+          then next-url 
+          for next-url = (and next
+                              (string-prepend-chapters
+                               (string-to-backend-filename next-title extension)
+                               (cdr next)
+                               org-export-headline-levels))
+          collect (list (cdar curr-entry)
+                        :section-title curr-title :section-url curr-url
+                        :section-title-next next-title :section-url-next next-url
+                        :section-title-prev prev-title :section-url-prev prev-url))))
+    (dolist (lookup url-lookup)
+      (let ((up (cdr (assoc (butlast (car lookup)) url-lookup))))
+        (when up
+          (plist-put (cdr lookup) :section-up-title (plist-get up :section-title))
+          (plist-put (cdr lookup) :section-up-url (plist-get up :section-url)))))
+    url-lookup))
 
 (defun org-export--collect-multipage-tree-properties (info)
   (org-combine-plists
@@ -301,9 +310,9 @@ required."
           (plist-get info :file-extension)))))
 
 (defun org-export--get-headline-number (element info)
-  "return the headline-numbering from given element. This
-requires that :headline-numbering has already been added to info
-(done in org-export--collect-tree-properties)."
+  "return the headline-numbering of the page containing
+element. This requires that :headline-numbering has already been
+added to info (done in org-export--collect-tree-properties)."
   (let* ((headline-numbering (plist-get info :headline-numbering))
          (elem element)
          (headline-number (alist-get elem headline-numbering)))
@@ -501,43 +510,22 @@ Return output directory's name."
     (org-export-multipage-to-dir 'html dir
       async subtreep visible-only body-only ext-plist)))
 
-
-;;; LATER: rename to org-html-multipage-toc and add to html-multipage
-;;; template
-
-;;; original definition:
-
-(defun org-html-toc (depth info &optional scope)
-  "Build a table of contents.
-DEPTH is an integer specifying the depth of the table.  INFO is
-a plist used as a communication channel.  Optional argument SCOPE
-is an element defining the scope of the table.  Return the table
-of contents as a string, or nil if it is empty."
-  (let ((toc-entries
-	 (mapcar (lambda (headline)
-		   (cons (org-html--format-toc-headline headline info)
-			 (org-export-get-relative-level headline info)))
-		 (org-export-collect-headlines info depth scope))))
-    (when toc-entries
-      (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
-			 (org-html--toc-text toc-entries)
-			 "</div>\n")))
-	(if scope toc
-	  (let ((outer-tag (if (org-html--html5-fancy-p info)
-			       "nav"
-			     "div")))
-	    (concat (format "<%s id=\"table-of-contents\" role=\"doc-toc\">\n" outer-tag)
-		    (let ((top-level (plist-get info :html-toplevel-hlevel)))
-		      (format "<h%d>%s</h%d>\n"
-			      top-level
-			      (org-html--translate "Table of Contents" info)
-			      top-level))
-		    toc
-		    (format "</%s>\n" outer-tag))))))))
-
-;;; multipage definition:
+;;; multipage definition (needs to be put into ox-html to work):
 
 (defun org-html--get-multipage-url (element info)
+  "find the headline numbering of the element's page and look up its
+url in :section-url-lookup."
+  (plist-get
+   (cdr
+    (assoc
+     (org-export--get-headline-number element info)
+     (plist-get info :section-url-lookup)
+     ))
+   :section-url))
+
+(defun org-html--get-multipage-url (element info)
+  "find the headline numbering of the element's page and look up its
+url in :section-url-lookup."
   (plist-get
    (alist-get
        (org-export--get-headline-number element info)
@@ -576,7 +564,7 @@ targets and targets."
      (t
       (if (plist-get info :multipage)
           (format "%s#%s"
-                  (org-html--get-)
+                  (org-html--get-multipage-url datum info)
                   (org-export-get-reference datum info))
         (format "#%s" (org-export-get-reference datum info)))))))
 
