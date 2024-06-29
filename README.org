@@ -1,4 +1,4 @@
-* ox-multipage-html
+* ox-html-multipage
 
 ** Author
 
