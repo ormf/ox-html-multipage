@@ -1,21 +1,19 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
-;;; changes in ox.el to generalize exporting, facilitating multipage
-;;; export.
+;;; changes in ox.el to generalize exporting to multipage output.
 ;;;
-;;; `org-export-as' is modified to generalize ox to facilitate
-;;; exporting to multiple pages: Its former body is split into two
-;;; external functions, which can get used by other backends like
-;;; multipage:
+;;; The body of `org-export-as' is split into two external functions,
+;;; which can get used as components by other backends.
 ;;;
 ;;; 1. `org-export--collect-tree-info' collects the complete
-;;;    parse-tree plus necessary information in info.
+;;;    parse-tree plus necessary information into the info proplist.
 ;;;
-;;; 2. `org-export--transcode-headline' generates the string for the
-;;;    output file.
+;;; 2. `org-export--transcode-headline' takes a headline and the info
+;;;    proplist as arguments to generate the string for the output
+;;;    file.
 ;;;
-;;; The redefinition of `org-export-as' should behave identically to
-;;; its previous definition.
+;;; The redefinition of `org-export-as' below should behave
+;;; identically to its previous definition.
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

@@ -12,8 +12,8 @@
    
 ** Overview
 
-   First attempt to extend org-html-export with multipage support
-
+   First attempt to extend org-html-export with multipage support. The
+   code has been developed on top of org 9.6.15
    
 ** Dependencies
 
