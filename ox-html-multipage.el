@@ -398,6 +398,9 @@ copied into it with the :parent property removed in the top node."
                   nil filename nil :silent)
     nil))
 
+;;; TODO: org-html--get-multipage-page-url is html specific, should be
+;;; generic.
+
 (defun org-export-multipage-to-dir
     (backend dir &optional async subtreep visible-only body-only ext-plist
 	     post-process)
@@ -498,9 +501,6 @@ or DIR."
            ;; Get proper return value.
            (or (and (functionp post-process) (funcall post-process file))
                file)))))))
-
-
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -955,6 +955,90 @@ DATA contains the supbtree of the section/page to export
 
   "")
 
+(defun org-html-template (contents info)
+  "Return complete document string after HTML conversion.
+CONTENTS is the transcoded contents string.  INFO is a plist
+holding export options."
+  (concat
+   (when (and (not (org-html-html5-p info)) (org-html-xhtml-p info))
+     (let* ((xml-declaration (plist-get info :html-xml-declaration))
+	    (decl (or (and (stringp xml-declaration) xml-declaration)
+		      (cdr (assoc (plist-get info :html-extension)
+				  xml-declaration))
+		      (cdr (assoc "html" xml-declaration))
+		      "")))
+       (when (not (or (not decl) (string= "" decl)))
+	 (format "%s\n"
+		 (format decl
+			 (or (and org-html-coding-system
+                                  ;; FIXME: Use Emacs 22 style here, see `coding-system-get'.
+				  (coding-system-get org-html-coding-system 'mime-charset))
+			     "iso-8859-1"))))))
+   (org-html-doctype info)
+   "\n"
+   (concat "<html"
+	   (cond ((org-html-xhtml-p info)
+		  (format
+		   " xmlns=\"http://www.w3.org/1999/xhtml\" lang=\"%s\" xml:lang=\"%s\""
+		   (plist-get info :language) (plist-get info :language)))
+		 ((org-html-html5-p info)
+		  (format " lang=\"%s\"" (plist-get info :language))))
+	   ">\n")
+   "<head>\n"
+   (org-html--build-meta-info info)
+   (org-html--build-head info)
+   (org-html--build-mathjax-config info)
+   "</head>\n"
+   "<body>\n"
+   (let ((link-up (org-trim (plist-get info :html-link-up)))
+	 (link-home (org-trim (plist-get info :html-link-home))))
+     (unless (and (string= link-up "") (string= link-home ""))
+       (format (plist-get info :html-home/up-format)
+	       (or link-up link-home)
+	       (or link-home link-up))))
+   ;; Preamble.
+   (org-html--build-pre/postamble 'preamble info)
+   ;; Document contents.
+   (let ((div (assq 'content (plist-get info :html-divs))))
+     (format "<%s id=\"%s\" class=\"%s\">\n"
+             (nth 1 div)
+             (nth 2 div)
+             (plist-get info :html-content-class)))
+   ;; Table of contents.
+   (let ((depth (plist-get info :with-toc)))
+     (when depth (org-html-toc depth info)))
+   ;; Document title.
+   (when (plist-get info :with-title)
+     (let ((title (and (plist-get info :with-title)
+		       (plist-get info :title)))
+	   (subtitle (plist-get info :subtitle))
+	   (html5-fancy (org-html--html5-fancy-p info)))
+       (when title
+	 (format
+	  (if html5-fancy
+	      "<header>\n<h1 class=\"title\">%s</h1>\n%s</header>"
+	    "<h1 class=\"title\">%s%s</h1>\n")
+	  (org-export-data title info)
+	  (if subtitle
+	      (format
+	       (if html5-fancy
+		   "<p class=\"subtitle\" role=\"doc-subtitle\">%s</p>\n"
+		 (concat "\n" (org-html-close-tag "br" nil info) "\n"
+			 "<span class=\"subtitle\">%s</span>\n"))
+	       (org-export-data subtitle info))
+	    "")))))
+   contents
+   (format "</%s>\n" (nth 1 (assq 'content (plist-get info :html-divs))))
+   ;; Possibly use the Klipse library live code blocks.
+   (when (plist-get info :html-klipsify-src)
+     (concat "<script>" (plist-get info :html-klipse-selection-script)
+	     "</script><script src=\""
+	     org-html-klipse-js
+	     "\"></script><link rel=\"stylesheet\" type=\"text/css\" href=\""
+	     org-html-klipse-css "\"/>"))
+   ;; Closing document.
+   "</body>\n</html>"))
+
 (defun org-html-inner-template (contents info &optional data)
   "Return body of document string after HTML conversion.
 CONTENTS is the transcoded contents string.  INFO is a plist
@@ -963,18 +1047,18 @@ holding export options.
 DATA contains the subtree of the parse tree of the section to be
 exported for multipage export.
 "
-  (concat
-   ;; Table of contents.
-   (let ((depth (plist-get info :with-toc)))
-     (when depth (org-html-toc depth info)))
    ;; Navigation
-   (if (plist-get info :multipage)
-       (org-html-nav info data)
-     "")
-   ;; Document contents.
-   contents
-   ;; Footnotes section.
-   (org-html-footnote-section info data)))
+   (format "<div id=\"page-main-body\">\n%s\n<div id=\"page-text-body\">%s</div></div>"
+            (if (plist-get info :multipage)
+               (org-html-nav info data)
+             "")
+           (concat
+           ;; Document contents.
+           contents
+           ;; Footnotes section.
+           (or (org-html-footnote-section info data) "")
+           ;; Postamble.
+           (org-html--build-pre/postamble 'postamble info))))
 
 
 
