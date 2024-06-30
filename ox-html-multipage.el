@@ -17,6 +17,38 @@
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;; `org-export-collect-footnote-definitions' is changed to obtain the
+;;; reference number the same way as in the footnote reference itself
+;;; rather than counting from zero as implemented before.
+
+(defun org-export-collect-footnote-definitions (info &optional data body-first)
+  "Return an alist between footnote numbers, labels and definitions.
+
+INFO is the current export state, as a plist.
+
+Definitions are collected throughout the whole parse tree, or
+DATA when non-nil.
+
+Sorting is done by order of references.  As soon as a new
+reference is encountered, other references are searched within
+its definition.  However, if BODY-FIRST is non-nil, this step is
+delayed after the whole tree is checked.  This alters results
+when references are found in footnote definitions.
+
+Definitions either appear as Org data or as a secondary string
+for inlined footnotes.  Unreferenced definitions are ignored."
+  (let (labels alist)
+    (org-export--footnote-reference-map
+     (lambda (f)
+       ;; Collect footnote number, label and definition.
+       (let ((l (org-element-property :label f)))
+	 (unless (and l (member l labels))
+	   (let ((n (org-export-get-footnote-number f info)))
+             (push (list n l (org-export-get-footnote-definition f info)) alist)))
+	 (when l (push l labels))))
+     (or data (plist-get info :parse-tree)) info body-first)
+    (nreverse alist)))
+
 (defun org-export--collect-tree-info
     (backend &optional subtreep visible-only body-only ext-plist)
   "Parse current Org Buffer into a tree suitable for final
