@@ -571,7 +571,7 @@ url in :section-url-lookup."
 
 ;;; rewritten functions from ox-html:
 
-(defun org-html--reference (datum info &optional named-only)
+(defun org-html--reference (datum info &optional named-only stripped)
   "Return an appropriate reference for DATUM.
 
 DATUM is an element or a `target' type object.  INFO is the
@@ -579,7 +579,11 @@ current export state, as a plist.
 
 When NAMED-ONLY is non-nil and DATUM has no NAME keyword, return
 nil.  This doesn't apply to headlines, inline tasks, radio
-targets and targets."
+targets and targets.
+
+When STRIPPED is true, return the reference stripped from the
+page it's on for multipage-output.
+"
   (let* ((type (org-element-type datum))
 	 (user-label
 	  (org-element-property
@@ -593,17 +597,17 @@ targets and targets."
 	   (or (plist-get info :html-prefer-user-labels)
 	       ;; Used CUSTOM_ID property unconditionally.
 	       (memq type '(headline inlinetask))))
-      (format "#%s" user-label))
+      (format "%s" user-label))
      ((and named-only
 	   (not (memq type '(headline inlinetask radio-target target)))
 	   (not user-label))
       nil)
      (t
-      (if (plist-get info :multipage)
+      (if (and (plist-get info :multipage) (not stripped))
           (format "%s#%s"
                   (org-html--get-multipage-url datum info)
                   (org-export-get-reference datum info))
-        (format "#%s" (org-export-get-reference datum info)))))))
+        (format "%s" (org-export-get-reference datum info)))))))
 
 (defun org-html-footnote-reference (footnote-reference _contents info)
   "Transcode a FOOTNOTE-REFERENCE element from Org to HTML.
@@ -629,10 +633,10 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
        ;;; the same page as the reference. It's enough to make sure,
        ;;; footnotes are only appearing on the page where they are
        ;;; referenced.
-       (if (plist-get info :multipage)
+       (if nil ;;; (plist-get info :multipage)
            (format " class=\"footref\" href=\"%s#fn.%d\" role=\"doc-backlink\""
                    (org-html--get-multipage-url footnote-reference info) n)
-         (format " class=\"footref\" href=\"ui#fn.%d\" role=\"doc-backlink\"" n))
+         (format " class=\"footref\" href=\"#fn.%d\" role=\"doc-backlink\"" n))
        info)))))
 
 ;;; we need data in the function args for multipage.
@@ -805,7 +809,9 @@ INFO is a plist holding contextual information.  See
 		    (or desc
 			(org-export-data
 			 (org-element-property :title destination) info)))))
-	     (format "<a href=\"%s\"%s>%s</a>" href attributes desc)))
+	     (if (plist-get info :multipage)
+                 (format "<a href=\"%s\"%s>%s</a>" href attributes desc)
+               (format "<a href=\"#%s\"%s>%s</a>" href attributes desc))))
 	  ;; Fuzzy link points to a target or an element.
 	  (_
            (if (and destination
@@ -838,7 +844,9 @@ INFO is a plist holding contextual information.  See
 			   ((not number) "No description for this link")
 			   ((numberp number) (number-to-string number))
 			   (t (mapconcat #'number-to-string number ".")))))
-               (format "<a href=\"%s\"%s>%s</a>" ref attributes desc)))))))
+               (if (plist-get info :multipage)
+                   (format "<a href=\"%s\"%s>%s</a>" ref attributes desc)
+                 (format "<a href=\"#%s\"%s>%s</a>" ref attributes desc))))))))
      ;; Coderef: replace link with the reference name or the
      ;; equivalent line number.
      ((string= type "coderef")
@@ -936,6 +944,9 @@ INFO is a plist used as a communication channel."
 	 definitions
 	 "\n"))))))
 
+(defun org-html-nav (info data)
+  "")
+
 (defun org-html-inner-template (contents info &optional data)
   "Return body of document string after HTML conversion.
 CONTENTS is the transcoded contents string.  INFO is a plist
@@ -944,9 +955,344 @@ holding export options."
    ;; Table of contents.
    (let ((depth (plist-get info :with-toc)))
      (when depth (org-html-toc depth info)))
+   ;; Navigation
+   (if (plist-get info :multipage)
+       (org-html-nav info data)
+     "")
    ;; Document contents.
    contents
    ;; Footnotes section.
    (org-html-footnote-section info data)))
 
 
+(defun org-html-toc (depth info &optional scope)
+  "Build a table of contents.
+DEPTH is an integer specifying the depth of the table.  INFO is
+a plist used as a communication channel.  Optional argument SCOPE
+is an element defining the scope of the table.  Return the table
+of contents as a string, or nil if it is empty."
+  (let ((toc-entries
+	 (mapcar (lambda (headline)
+		   (cons (org-html--format-toc-headline headline info)
+			 (org-export-get-relative-level headline info)))
+		 (org-export-collect-headlines info depth scope))))
+    (when toc-entries
+      (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
+			 (org-html--toc-text toc-entries)
+			 "</div>\n")))
+	(if scope toc
+	  (let ((outer-tag (if (org-html--html5-fancy-p info)
+			       "nav"
+			     "div")))
+	    (concat (format "<%s id=\"table-of-contents\" role=\"doc-toc\">\n" outer-tag)
+		    (let ((top-level (plist-get info :html-toplevel-hlevel)))
+		      (format "<h%d>%s</h%d>\n"
+			      top-level
+			      (org-html--translate "Table of Contents" info)
+			      top-level))
+		    toc
+		    (format "</%s>\n" outer-tag))))))))
+
+;;; adjust different reference sections:
+
+(defun org-html-list-of-listings (info)
+  "Build a list of listings.
+INFO is a plist used as a communication channel.  Return the list
+of listings as a string, or nil if it is empty."
+  (let ((lol-entries (org-export-collect-listings info)))
+    (when lol-entries
+      (concat "<div id=\"list-of-listings\">\n"
+	      (let ((top-level (plist-get info :html-toplevel-hlevel)))
+		(format "<h%d>%s</h%d>\n"
+			top-level
+			(org-html--translate "List of Listings" info)
+			top-level))
+	      "<div id=\"text-list-of-listings\">\n<ul>\n"
+	      (let ((count 0)
+		    (initial-fmt (format "<span class=\"listing-number\">%s</span>"
+					 (org-html--translate "Listing %d:" info))))
+		(mapconcat
+		 (lambda (entry)
+		   (let ((label (org-html--reference entry info t t))
+			 (title (org-trim
+				 (org-export-data
+				  (or (org-export-get-caption entry t)
+				      (org-export-get-caption entry))
+				  info))))
+		     (concat
+		      "<li>"
+		      (if (not label)
+			  (concat (format initial-fmt (cl-incf count))
+				  " "
+				  title)
+			(format "<a href=\"#%s\">%s %s</a>"
+				label
+				(format initial-fmt (cl-incf count))
+				title))
+		      "</li>")))
+		 lol-entries "\n"))
+	      "\n</ul>\n</div>\n</div>"))))
+
+(defun org-html-list-of-tables (info)
+  "Build a list of tables.
+INFO is a plist used as a communication channel.  Return the list
+of tables as a string, or nil if it is empty."
+  (let ((lol-entries (org-export-collect-tables info)))
+    (when lol-entries
+      (concat "<div id=\"list-of-tables\">\n"
+	      (let ((top-level (plist-get info :html-toplevel-hlevel)))
+		(format "<h%d>%s</h%d>\n"
+			top-level
+			(org-html--translate "List of Tables" info)
+			top-level))
+	      "<div id=\"text-list-of-tables\">\n<ul>\n"
+	      (let ((count 0)
+		    (initial-fmt (format "<span class=\"table-number\">%s</span>"
+					 (org-html--translate "Table %d:" info))))
+		(mapconcat
+		 (lambda (entry)
+		   (let ((label (org-html--reference entry info t t))
+			 (title (org-trim
+				 (org-export-data
+				  (or (org-export-get-caption entry t)
+				      (org-export-get-caption entry))
+				  info))))
+		     (concat
+		      "<li>"
+		      (if (not label)
+			  (concat (format initial-fmt (cl-incf count))
+				  " "
+				  title)
+			(format "<a href=\"#%s\">%s %s</a>"
+				label
+				(format initial-fmt (cl-incf count))
+				title))
+		      "</li>")))
+		 lol-entries "\n"))
+	      "\n</ul>\n</div>\n</div>"))))
+
+(defun org-html-example-block (example-block _contents info)
+  "Transcode a EXAMPLE-BLOCK element from Org to HTML.
+CONTENTS is nil.  INFO is a plist holding contextual
+information."
+  (let ((attributes (org-export-read-attribute :attr_html example-block)))
+    (if (plist-get attributes :textarea)
+	(org-html--textarea-block example-block)
+      (format "<pre class=\"example\"%s>\n%s</pre>"
+	      (let* ((reference (org-html--reference example-block info nil t))
+		     (a (org-html--make-attribute-string
+			 (if (or (not reference) (plist-member attributes :id))
+			     attributes
+			   (plist-put attributes :id reference)))))
+		(if (org-string-nw-p a) (concat " " a) ""))
+	      (org-html-format-code example-block info)))))
+
+(defun org-html-inline-src-block (inline-src-block _contents info)
+  "Transcode an INLINE-SRC-BLOCK element from Org to HTML.
+CONTENTS holds the contents of the item.  INFO is a plist holding
+contextual information."
+  (let* ((lang (org-element-property :language inline-src-block))
+	 (code (org-html-fontify-code
+		(org-element-property :value inline-src-block)
+		lang))
+	 (label
+	  (let ((lbl (org-html--reference inline-src-block info t t)))
+	    (if (not lbl) "" (format " id=\"%s\"" lbl)))))
+    (format "<code class=\"src src-%s\"%s>%s</code>" lang label code)))
+
+(defun org-html-paragraph (paragraph contents info)
+  "Transcode a PARAGRAPH element from Org to HTML.
+CONTENTS is the contents of the paragraph, as a string.  INFO is
+the plist used as a communication channel."
+  (let* ((parent (org-export-get-parent paragraph))
+	 (parent-type (org-element-type parent))
+	 (style '((footnote-definition " class=\"footpara\"")
+		  (org-data " class=\"footpara\"")))
+	 (attributes (org-html--make-attribute-string
+		      (org-export-read-attribute :attr_html paragraph)))
+	 (extra (or (cadr (assq parent-type style)) "")))
+    (cond
+     ((and (eq parent-type 'item)
+	   (not (org-export-get-previous-element paragraph info))
+	   (let ((followers (org-export-get-next-element paragraph info 2)))
+	     (and (not (cdr followers))
+		  (memq (org-element-type (car followers)) '(nil plain-list)))))
+      ;; First paragraph in an item has no tag if it is alone or
+      ;; followed, at most, by a sub-list.
+      contents)
+     ((org-html-standalone-image-p paragraph info)
+      ;; Standalone image.
+      (let ((caption
+	     (let ((raw (org-export-data
+			 (org-export-get-caption paragraph) info))
+		   (org-html-standalone-image-predicate
+		    #'org-html--has-caption-p))
+	       (if (not (org-string-nw-p raw)) raw
+		 (concat "<span class=\"figure-number\">"
+			 (format (org-html--translate "Figure %d:" info)
+				 (org-export-get-ordinal
+				  (org-element-map paragraph 'link
+				    #'identity info t)
+				  info nil #'org-html-standalone-image-p))
+			 " </span>"
+			 raw))))
+	    (label (org-html--reference paragraph info nil t)))
+	(org-html--wrap-image contents info caption label)))
+     ;; Regular paragraph.
+     (t (format "<p%s%s>\n%s</p>"
+		(if (org-string-nw-p attributes)
+		    (concat " " attributes) "")
+		extra contents)))))
+
+(defun org-html-quote-block (quote-block contents info)
+  "Transcode a QUOTE-BLOCK element from Org to HTML.
+CONTENTS holds the contents of the block.  INFO is a plist
+holding contextual information."
+  (format "<blockquote%s>\n%s</blockquote>"
+	  (let* ((reference (org-html--reference quote-block info t t))
+		 (attributes (org-export-read-attribute :attr_html quote-block))
+		 (a (org-html--make-attribute-string
+		     (if (or (not reference) (plist-member attributes :id))
+			 attributes
+		       (plist-put attributes :id reference)))))
+	    (if (org-string-nw-p a) (concat " " a) ""))
+	  contents))
+
+(defun org-html-special-block (special-block contents info)
+  "Transcode a SPECIAL-BLOCK element from Org to HTML.
+CONTENTS holds the contents of the block.  INFO is a plist
+holding contextual information."
+  (let* ((block-type (org-element-property :type special-block))
+         (html5-fancy (and (org-html--html5-fancy-p info)
+                           (member block-type org-html-html5-elements)))
+         (attributes (org-export-read-attribute :attr_html special-block)))
+    (unless html5-fancy
+      (let ((class (plist-get attributes :class)))
+        (setq attributes (plist-put attributes :class
+                                    (if class (concat class " " block-type)
+                                      block-type)))))
+    (let* ((contents (or contents ""))
+	   (reference (org-html--reference special-block info nil t))
+	   (a (org-html--make-attribute-string
+	       (if (or (not reference) (plist-member attributes :id))
+		   attributes
+		 (plist-put attributes :id reference))))
+	   (str (if (org-string-nw-p a) (concat " " a) "")))
+      (if html5-fancy
+	  (format "<%s%s>\n%s</%s>" block-type str contents block-type)
+	(format "<div%s>\n%s\n</div>" str contents)))))
+
+(defun org-html-src-block (src-block _contents info)
+  "Transcode a SRC-BLOCK element from Org to HTML.
+CONTENTS holds the contents of the item.  INFO is a plist holding
+contextual information."
+  (if (org-export-read-attribute :attr_html src-block :textarea)
+      (org-html--textarea-block src-block)
+    (let* ((lang (org-element-property :language src-block))
+	   (code (org-html-format-code src-block info))
+	   (label (let ((lbl (org-html--reference src-block info t t)))
+		    (if lbl (format " id=\"%s\"" lbl) "")))
+	   (klipsify  (and  (plist-get info :html-klipsify-src)
+                            (member lang '("javascript" "js"
+					   "ruby" "scheme" "clojure" "php" "html")))))
+      (if (not lang) (format "<pre class=\"example\"%s>\n%s</pre>" label code)
+	(format "<div class=\"org-src-container\">\n%s%s\n</div>"
+		;; Build caption.
+		(let ((caption (org-export-get-caption src-block)))
+		  (if (not caption) ""
+		    (let ((listing-number
+			   (format
+			    "<span class=\"listing-number\">%s </span>"
+			    (format
+			     (org-html--translate "Listing %d:" info)
+			     (org-export-get-ordinal
+			      src-block info nil #'org-html--has-caption-p)))))
+		      (format "<label class=\"org-src-name\">%s%s</label>"
+			      listing-number
+			      (org-trim (org-export-data caption info))))))
+		;; Contents.
+		(if klipsify
+		    (format "<pre><code class=\"src src-%s\"%s%s>%s</code></pre>"
+			    lang
+			    label
+			    (if (string= lang "html")
+				" data-editor-type=\"html\""
+			      "")
+			    code)
+		  (format "<pre class=\"src src-%s\"%s>%s</pre>"
+                          lang label code)))))))
+
+(defun org-html-table (table contents info)
+  "Transcode a TABLE element from Org to HTML.
+CONTENTS is the contents of the table.  INFO is a plist holding
+contextual information."
+  (if (eq (org-element-property :type table) 'table.el)
+      ;; "table.el" table.  Convert it using appropriate tools.
+      (org-html-table--table.el-table table info)
+    ;; Standard table.
+    (let* ((caption (org-export-get-caption table))
+	   (number (org-export-get-ordinal
+		    table info nil #'org-html--has-caption-p))
+	   (attributes
+	    (org-html--make-attribute-string
+	     (org-combine-plists
+	      (list :id (org-html--reference table info t t))
+	      (and (not (org-html-html5-p info))
+		   (plist-get info :html-table-attributes))
+	      (org-export-read-attribute :attr_html table))))
+	   (alignspec
+	    (if (bound-and-true-p org-html-format-table-no-css)
+		"align=\"%s\""
+	      "class=\"org-%s\""))
+	   (table-column-specs
+	    (lambda (table info)
+	      (mapconcat
+	       (lambda (table-cell)
+		 (let ((alignment (org-export-table-cell-alignment
+				   table-cell info)))
+		   (concat
+		    ;; Begin a colgroup?
+		    (when (org-export-table-cell-starts-colgroup-p
+			   table-cell info)
+		      "\n<colgroup>")
+		    ;; Add a column.  Also specify its alignment.
+		    (format "\n%s"
+			    (org-html-close-tag
+			     "col" (concat " " (format alignspec alignment)) info))
+		    ;; End a colgroup?
+		    (when (org-export-table-cell-ends-colgroup-p
+			   table-cell info)
+		      "\n</colgroup>"))))
+	       (org-html-table-first-row-data-cells table info) "\n"))))
+      (format "<table%s>\n%s\n%s\n%s</table>"
+	      (if (equal attributes "") "" (concat " " attributes))
+	      (if (not caption) ""
+		(format (if (plist-get info :html-table-caption-above)
+			    "<caption class=\"t-above\">%s</caption>"
+			  "<caption class=\"t-bottom\">%s</caption>")
+			(concat
+			 "<span class=\"table-number\">"
+			 (format (org-html--translate "Table %d:" info) number)
+			 "</span> " (org-export-data caption info))))
+	      (funcall table-column-specs table info)
+	      contents))))
+
+(defun org-html-inline-src-block (inline-src-block _contents info)
+  "Transcode an INLINE-SRC-BLOCK element from Org to HTML.
+CONTENTS holds the contents of the item.  INFO is a plist holding
+contextual information."
+  (let* ((lang (org-element-property :language inline-src-block))
+	 (code (org-html-fontify-code
+		(org-element-property :value inline-src-block)
+		lang))
+	 (label
+	  (let ((lbl (org-html--reference inline-src-block info t t)))
+	    (if (not lbl) "" (format " id=\"%s\"" lbl)))))
+    (format "<code class=\"src src-%s\"%s>%s</code>" lang label code)))
+
+(defun org-html-target (target _contents info)
+  "Transcode a TARGET object from Org to HTML.
+CONTENTS is nil.  INFO is a plist holding contextual
+information."
+  (let ((ref (org-html--reference target info nil t)))
+    (org-html--anchor ref nil nil info)))
