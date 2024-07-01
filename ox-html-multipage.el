@@ -558,19 +558,20 @@ or DIR."
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
        for file in section-filenames
-       for tree in section-trees
+       for tl-hl-numbering in stripped-section-headline-numbering
        do
-       (progn
-         (plist-put info :tl-section-parse-tree tree)
+       (let ((tl-headline (car tl-hl-numbering)))
+         (plist-put info :tl-headline tl-headline)
+         (plist-put info :tl-headline-number (cdr tl-hl-numbering))
          (if async
              (org-export-async-start
                  (lambda (file) (org-export-add-to-stack (expand-file-name file) backend))
-               `(let ((output (org-export--transcode-headline tree info))
+               `(let ((output (org-export--transcode-headline tl-headline info))
                       (file (format "%s/%s" dir file)))
                   (message "writing '%s'" file)
                   (write-string-to-file output encoding file)
                   (or (ignore-errors (funcall ',post-process ,file)) ,file)))
-           (let ((output (org-export--transcode-headline tree info))
+           (let ((output (org-export--transcode-headline tl-headline info))
                  (file (format "%s/%s" dir file)))
              (message "writing '%s'" file)
              (write-string-to-file output encoding file)
@@ -1113,7 +1114,8 @@ INFO is a plist used as a communication channel."
                           :section-url)
                          (format "#%s" (org-html--reference headline info)))
                         (if (equal headline-number tl-headline-number)
-                            "class=\"toc-active\"" ""))
+                            "class=\"toc-entry toc-active\""
+                          "class=\"toc-entry\""))
               (format "#%s" (org-html--reference headline info)))
 	    ;; Body.
 	    (concat
@@ -1131,19 +1133,16 @@ DEPTH is an integer specifying the depth of the table.  INFO is
 a plist used as a communication channel.  Optional argument SCOPE
 is an element defining the scope of the table.  Return the table
 of contents as a string, or nil if it is empty."
-  (let* ((tl-headline-number
-          (cdr (assoc
-                (plist-get info :tl-section-parse-tree)
-                (plist-get info :headline-numbering))))
-         (toc-entries
+  (let* ((toc-entries
 	  (mapcar (lambda (headline)
                     (let ((headline-number
                            (org-export-get-headline-number headline info)))
                       (cl-list*
                        (org-html--format-toc-headline
                         headline
-                        (cl-list* :tl-headline-number tl-headline-number info))
-                       (org-html--hidden-in-toc? headline-number tl-headline-number)
+                        info)
+                       (org-html--hidden-in-toc? headline-number
+                                                 (plist-get info :tl-headline-number))
                        (org-export-get-relative-level headline info))))
 		  (org-export-collect-headlines info depth scope))))
     (when toc-entries
@@ -1200,16 +1199,33 @@ INFO is a plist used as a communication channel."
 	 definitions
 	 "\n"))))))
 
-(defun org-html-nav (info data)
+(defun org-html-nav-left (info data)
   "Return nav string for multipage Navigation.
 
 INFO is a plist used as a communication channel.
 
 DATA contains the supbtree of the section/page to export
 "
-  (let ((section-urls )))
+  (format "<nav id=\"nav-left\"><a href=\"%s\">&lt;</a></nav>"
+          (or
+           (plist-get
+            (plist-get info :tl-section-urls)
+            :section-url-prev)
+           "")))
 
-  "")
+(defun org-html-nav-right (info data)
+  "Return nav string for multipage Navigation.
+
+INFO is a plist used as a communication channel.
+
+DATA contains the supbtree of the section/page to export
+"
+  (format "<nav id=\"nav-left\"><a href=\"%s\">&gt;</a></nav>"
+          (or
+           (plist-get
+            (plist-get info :tl-section-urls)
+            :section-url-next)
+           "")))
 
 (defun org-html-template (contents info)
   "Return complete document string after HTML conversion.
@@ -1303,18 +1319,27 @@ holding export options.
 DATA contains the subtree of the parse tree of the section to be
 exported for multipage export.
 "
-   ;; Navigation
-   (format "<div id=\"page-main-body\">\n%s\n<div id=\"page-text-body\">%s</div></div>"
+  ;; Navigation
+  (let ((tl-section-urls
+         (alist-get
+          (plist-get global-info :tl-headline-number)
+          (plist-get global-info :section-url-lookup))))
+    (format "<div id=\"page-main-body\">\n%s\n<div id=\"page-text-body\">%s</div>%s</div>"
             (if (plist-get info :multipage)
-               (org-html-nav info data)
-             "")
-           (concat
-           ;; Document contents.
-           contents
-           ;; Footnotes section.
-           (or (org-html-footnote-section info data) "")
-           ;; Postamble.
-           (org-html--build-pre/postamble 'postamble info))))
+                (org-html-nav-left
+                 (cl-list* :tl-section-urls tl-section-urls info) data)
+              "")
+            (concat
+             ;; Document contents.
+             contents
+             ;; Footnotes section.
+             (or (org-html-footnote-section info data) "")
+             ;; Postamble.
+             (org-html--build-pre/postamble 'postamble info))
+            (if (plist-get info :multipage)
+                (org-html-nav-right
+                 (cl-list* :tl-section-urls tl-section-urls info) data)
+              ""))))
 
 ;;; adjust different reference sections:
 
