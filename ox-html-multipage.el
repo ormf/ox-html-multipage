@@ -21,6 +21,19 @@
 ;;; reference number the same way as in the footnote reference itself
 ;;; rather than counting from zero as implemented before.
 
+;;;
+;;; CHANGES:
+;;;
+;;;  - Added "Chapter %s", "Section %s" and "Fig. %s" to
+;;;    org-export-dictionary
+;;;
+;;;  - link reference to an inline image will get "Fig. <num>" label.
+;;;
+;;;  - link reference to a chapter or section will get "Chapter <num>"
+;;;    or "Section <num>" label.
+;;;
+
+
 (defun org-export-collect-footnote-definitions (info &optional data body-first)
   "Return an alist between footnote numbers, labels and definitions.
 
@@ -266,6 +279,63 @@ Return code as a string."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
+;;; Utils
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+(setq org-export-dictionary
+      (append
+       '(("Section %s"
+          ("ar" :default "انظر قسم %s")
+          ("cs" :default "sekce %s")
+          ("da" :default "afsnit %s")
+          ("de" :default "Abschnitt %s")
+          ("es" :ascii "seccion %s" :html "secci&oacute;n %s" :default "sección %s")
+          ("et" :html "peat&#252;kki %s" :utf-8 "peatükki %s")
+;;          ("fa" :default "نمایش بخش %s")
+          ("fr" :default "section %s")
+          ("it" :default "sezione %s")
+;;          ("ja" :default "セクション %s を参照")
+          ("nl" :default "sectie %s"
+           :html "sectie&nbsp;%s" :latex "sectie~%s")
+          ("pt_BR" :html "se&ccedil;&atilde;o %s" :default "seção %s"
+           :ascii "secao %s")
+          ("ro" :default "secțiunea %s")
+          ("ru" :html "&&#1088;&#1072;&#1079;&#1076;&#1077;&#1083; %s"
+           :utf-8 "раздел %s")
+          ("sl" :default "poglavje %d")
+          ("tr" :default "bölüm %s")
+;;          ("zh-CN" :html "&#21442;&#35265;&#31532;%s&#33410;" :utf-8 "参见第%s节")
+          )
+         ("Chapter %s"
+          ("ar" :default "الفصل %s")
+          ("cs" :default "kapitola %s")
+          ("da" :default "kapitel %s")
+          ("de" :default "Kapitel %s")
+          ("es" :ascii "capitulo %s" :html "cap&iacute;tulo %s" :default "capítulo %s")
+          ("et" :html "peat&#252;kk %s" :utf-8 "peatükk %s")
+          ("fa" :default "فصل %s")
+          ("fr" :default "chapitre %s")
+          ("it" :default "capitolo %s")
+          ("ja" :default "章 %s")
+          ("nl" :default "hoofdstuk %s"
+           :html "hoofdstuk&nbsp;%s" :latex "hoofdstuk~%s")
+          ("pt_BR" :ascii "capitulo %s" :html "cap&iacute;tulo %s" :default "capítulo %s")
+          ("ro" :default "capitol %s")
+          ("ru" :html "&#1075;&#1083;&#1072;&#1074;&#1072;&nbsp;%s"
+           :utf-8 "глава %s")
+          ("sl" :default "odsek %s")
+          ("tr" :html "b&#246;l&#252;m" :default "bölüm %s")
+          ("zh-CN" :html "&#31456;&#33410;" :utf-8 "章节 %s"))
+         ("Fig. %s"
+          ("de" :default "Abb. %s")))
+       org-export-dictionary))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
 ;;; Code specific to the multipage backend (currently html centric)
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -490,23 +560,25 @@ or DIR."
        for file in section-filenames
        for tree in section-trees
        do
-       (if async
-           (org-export-async-start
-               (lambda (file) (org-export-add-to-stack (expand-file-name file) backend))
-             `(let ((output (org-export--transcode-headline tree info))
-                    (file (format "%s/%s" dir file)))
-                (message "writing '%s'" file)
-                (write-string-to-file output encoding file)
-                (or (ignore-errors (funcall ',post-process ,file)) ,file)))
-         (let ((output (org-export--transcode-headline tree info))
-               (file (format "%s/%s" dir file)))
-           (message "writing '%s'" file)
-           (write-string-to-file output encoding file)
-           (when (and (org-export--copy-to-kill-ring-p) (org-string-nw-p output))
-             (org-kill-new output))
-           ;; Get proper return value.
-           (or (and (functionp post-process) (funcall post-process file))
-               file)))))))
+       (progn
+         (plist-put info :tl-section-parse-tree tree)
+         (if async
+             (org-export-async-start
+                 (lambda (file) (org-export-add-to-stack (expand-file-name file) backend))
+               `(let ((output (org-export--transcode-headline tree info))
+                      (file (format "%s/%s" dir file)))
+                  (message "writing '%s'" file)
+                  (write-string-to-file output encoding file)
+                  (or (ignore-errors (funcall ',post-process ,file)) ,file)))
+           (let ((output (org-export--transcode-headline tree info))
+                 (file (format "%s/%s" dir file)))
+             (message "writing '%s'" file)
+             (write-string-to-file output encoding file)
+             (when (and (org-export--copy-to-kill-ring-p) (org-string-nw-p output))
+               (org-kill-new output))
+             ;; Get proper return value.
+             (or (and (functionp post-process) (funcall post-process file))
+                 file))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -635,14 +707,19 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 
       (org-html--anchor
        id n
-       ;;; we probably don't need this as footnotes are *always* on
-       ;;; the same page as the reference. It's enough to make sure,
-       ;;; footnotes are only appearing on the page where they are
-       ;;; referenced.
-       (if nil ;;; (plist-get info :multipage)
-           (format " class=\"footref\" href=\"%s#fn.%d\" role=\"doc-backlink\""
-                   (org-html--get-multipage-url footnote-reference info) n)
-         (format " class=\"footref\" href=\"#fn.%d\" role=\"doc-backlink\"" n))
+       ;; We don't need the following as footnotes are in most cases
+       ;; on the same page as the reference. It's enough to make sure,
+       ;; footnotes are only appearing on the page where they are
+       ;; referenced. It is included here as a stub for a later option
+       ;; for multipage export to make footnotes appear at the end of
+       ;; a document on a dedicated page.
+       ;;
+       ;; (if (plist-get info :multipage)
+       ;;     (format " class=\"footref\" href=\"%s#fn.%d\" role=\"doc-backlink\""
+       ;;             (org-html--get-multipage-url footnote-reference info) n)
+       ;;   (format " class=\"footref\" href=\"#fn.%d\" role=\"doc-backlink\"" n))
+       ;;
+       (format " class=\"footref\" href=\"#fn.%d\" role=\"doc-backlink\"" n)
        info)))))
 
 ;;; we need data in the function args for multipage.
@@ -883,9 +960,17 @@ INFO is a plist holding contextual information.  See
 		  ;; description.  Display section number.
 		  (if (and (org-export-numbered-headline-p destination info)
 			   (not desc))
-		      (mapconcat #'number-to-string
-				 (org-export-get-headline-number
-				  destination info) ".")
+                      (let ((headline-number (org-export-get-headline-number
+                                              destination info)))
+                        (if (> (length headline-number) 1)
+                            (format
+                             (org-html--translate "Section %s" info)
+                             (mapconcat #'number-to-string
+                                        headline-number "."))
+                            (format
+                             (org-html--translate "Chapter %s" info)
+                             (mapconcat #'number-to-string
+                                        headline-number "."))))
 		    ;; Case 2: Either the headline is un-numbered or
 		    ;; LINK has a custom description.  Display LINK's
 		    ;; description or headline's title.
@@ -913,19 +998,21 @@ INFO is a plist holding contextual information.  See
                      (if (eq 'latex-environment (org-element-type destination))
                          #'org-html--math-environment-p
                        #'org-html--has-caption-p))
-                    (number
+                    (numbered-ref
 		     (cond
 		      (desc nil)
 		      ((org-html-standalone-image-p destination info)
-		       (org-export-get-ordinal
-			(org-element-map destination 'link #'identity info t)
-			info '(link) 'org-html-standalone-image-p))
+                       (format (org-html--translate "Fig. %s" info)
+                               (org-export-get-ordinal
+                                (org-element-map destination 'link #'identity info t)
+                                info '(link) 'org-html-standalone-image-p)))
 		      (t (org-export-get-ordinal
 			  destination info nil counter-predicate))))
                     (desc
 		     (cond (desc)
-			   ((not number) "No description for this link")
-			   ((numberp number) (number-to-string number))
+			   ((not numbered-ref) "No description for this link")
+			   ((numberp numbered-ref) (number-to-string number))
+                           ((stringp numbered-ref) numbered-ref)
 			   (t (mapconcat #'number-to-string number ".")))))
                (if (plist-get info :multipage)
                    (format "<a href=\"%s\"%s>%s</a>" ref attributes desc)
@@ -956,6 +1043,35 @@ INFO is a plist holding contextual information.  See
      (t
       (format "<i>%s</i>" desc)))))
 
+(defun org-html--toc-text (toc-entries)
+  "Return innards of a table of contents, as a string.
+TOC-ENTRIES is an alist where key is an entry title, as a string,
+and value is its relative level, as an integer."
+  (let* ((prev-level (1- (cddar toc-entries)))
+	 (start-level prev-level))
+    (concat
+     (mapconcat
+      (lambda (entry)
+	(let ((headline (car entry))
+              (visible (cadr entry))
+	      (level (cddr entry)))
+	  (concat
+	   (let* ((cnt (- level prev-level))
+		  (times (if (> cnt 0) (1- cnt) (- cnt))))
+	     (setq prev-level level)
+	     (concat
+	      (org-html--make-string
+	       times (cond ((> cnt 0) "\n<ul>\n<li>")
+			   ((< cnt 0) "</li>\n</ul>\n")))
+	      (if (> cnt 0) "\n<ul>\n<li>" "</li>\n<li>")))
+	   headline)))
+      toc-entries "")
+     (org-html--make-string (- prev-level start-level) "</li>\n</ul>\n"))))
+
+(defun org-html--visible-in-toc? (headline-number tl-headline-number)
+  nil)
+
+
 (defun org-html--format-toc-headline (headline info)
   "Return an appropriate table of contents entry for HEADLINE.
 INFO is a plist used as a communication channel."
@@ -985,10 +1101,47 @@ INFO is a plist used as a communication channel."
 	    (concat
 	     (and (not (org-export-low-level-p headline info))
 		  (org-export-numbered-headline-p headline info)
-		  (concat (mapconcat #'number-to-string headline-number ".")
-			  ". "))
+		  (concat
+                   (mapconcat #'number-to-string headline-number ".")
+                   "&nbsp;&nbsp;"))
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
+
+(defun org-html-toc (depth info &optional scope)
+  "Build a table of contents.
+DEPTH is an integer specifying the depth of the table.  INFO is
+a plist used as a communication channel.  Optional argument SCOPE
+is an element defining the scope of the table.  Return the table
+of contents as a string, or nil if it is empty."
+  (let* ((tl-headline-number
+          (cdr (assoc
+                (plist-get info :tl-section-parse-tree)
+                (plist-get info :headline-numbering))))
+         (toc-entries
+	  (mapcar (lambda (headline)
+		    (cl-list*
+                     (org-html--format-toc-headline headline info)
+                     (org-html--visible-in-toc?
+                      (org-export-get-headline-number headline info)
+                      tl-headline-number)
+		     (org-export-get-relative-level headline info)))
+		  (org-export-collect-headlines info depth scope))))
+    (when toc-entries
+      (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
+			 (org-html--toc-text toc-entries)
+			 "</div>\n")))
+	(if scope toc
+	  (let ((outer-tag (if (org-html--html5-fancy-p info)
+			       "nav"
+			     "div")))
+	    (concat (format "<%s id=\"table-of-contents\" role=\"doc-toc\">\n" outer-tag)
+		    (let ((top-level (plist-get info :html-toplevel-hlevel)))
+		      (format "<h%d>%s</h%d>\n"
+			      top-level
+			      (org-html--translate "Table of Contents" info)
+			      top-level))
+		    toc
+		    (format "</%s>\n" outer-tag))))))))
 
 (defun org-html-footnote-section (info &optional data)
   "Format the footnote section.
@@ -1142,9 +1295,6 @@ exported for multipage export.
            (or (org-html-footnote-section info data) "")
            ;; Postamble.
            (org-html--build-pre/postamble 'postamble info))))
-
-
-
 
 ;;; adjust different reference sections:
 
