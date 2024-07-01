@@ -1047,35 +1047,48 @@ INFO is a plist holding contextual information.  See
   "Return innards of a table of contents, as a string.
 TOC-ENTRIES is an alist where key is an entry title, as a string,
 and value is its relative level, as an integer."
+  (setq debug toc-entries)
   (let* ((prev-level (1- (cddar toc-entries)))
 	 (start-level prev-level))
     (concat
      (mapconcat
       (lambda (entry)
 	(let ((headline (car entry))
-              (visible (cadr entry))
+              (hidden (cadr entry))
 	      (level (cddr entry)))
 	  (concat
-	   (let* ((cnt (- level prev-level))
-		  (times (if (> cnt 0) (1- cnt) (- cnt))))
-	     (setq prev-level level)
-	     (concat
-	      (org-html--make-string
-	       times (cond ((> cnt 0) "\n<ul>\n<li>")
-			   ((< cnt 0) "</li>\n</ul>\n")))
-	      (if (> cnt 0) "\n<ul>\n<li>" "</li>\n<li>")))
+	   (format
+            (let* ((cnt (- level prev-level))
+                   (times (if (> cnt 0) (1- cnt) (- cnt))))
+              (setq prev-level level)
+              (concat
+               (org-html--make-string
+                times (cond ((> cnt 0) "\n<ul>\n<li>")
+                            ((< cnt 0) "</li>\n</ul>\n")))
+               (if (> cnt 0) "\n<ul>\n<li%s>" "</li>\n<li%s>")))
+            (if hidden " class=\"toc-hidden\"" ""))
 	   headline)))
       toc-entries "")
      (org-html--make-string (- prev-level start-level) "</li>\n</ul>\n"))))
 
-(defun org-html--visible-in-toc? (headline-number tl-headline-number)
-  nil)
-
+(defun org-html--hidden-in-toc? (headline-number tl-headline-number)
+  (and
+   (> (length headline-number) 1)
+   (let ((l1 (length headline-number))
+         (l2 (length tl-headline-number)))
+     (cond
+      ((= l1 l2) (not (equal (butlast headline-number)
+                             (butlast tl-headline-number))))
+      ((> l1 l2) (not (equal tl-headline-number
+                             (butlast headline-number))))
+      (t (not (equal (butlast headline-number)
+                     (butlast (butlast tl-headline-number)))))))))
 
 (defun org-html--format-toc-headline (headline info)
   "Return an appropriate table of contents entry for HEADLINE.
 INFO is a plist used as a communication channel."
   (let* ((headline-number (org-export-get-headline-number headline info))
+         (tl-headline-number (plist-get info :tl-headline-number))
 	 (todo (and (plist-get info :with-todo-keywords)
 		    (let ((todo (org-element-property :todo-keyword headline)))
 		      (and todo (org-export-data todo info)))))
@@ -1088,14 +1101,19 @@ INFO is a plist used as a communication channel."
 		info))
 	 (tags (and (eq (plist-get info :with-tags) t)
 		    (org-export-get-tags headline info))))
-    (format "<a href=\"%s\">%s</a>"
-            ;; Label
+    (format "<a %s>%s</a>"
+            ;; Target
             (if (plist-get info :multipage)
-                (format "%s" (plist-get
-                              (alist-get
-                               headline-number
-                               (plist-get info :section-url-lookup))
-                              :section-url))
+                (format "href=\"%s\"%s"
+                        (concat
+                         (plist-get
+                          (alist-get
+                           headline-number
+                           (plist-get info :section-url-lookup))
+                          :section-url)
+                         (format "#%s" (org-html--reference headline info)))
+                        (if (equal headline-number tl-headline-number)
+                            "class=\"toc-active\"" ""))
               (format "#%s" (org-html--reference headline info)))
 	    ;; Body.
 	    (concat
@@ -1119,12 +1137,14 @@ of contents as a string, or nil if it is empty."
                 (plist-get info :headline-numbering))))
          (toc-entries
 	  (mapcar (lambda (headline)
-		    (cl-list*
-                     (org-html--format-toc-headline headline info)
-                     (org-html--visible-in-toc?
-                      (org-export-get-headline-number headline info)
-                      tl-headline-number)
-		     (org-export-get-relative-level headline info)))
+                    (let ((headline-number
+                           (org-export-get-headline-number headline info)))
+                      (cl-list*
+                       (org-html--format-toc-headline
+                        headline
+                        (cl-list* :tl-headline-number tl-headline-number info))
+                       (org-html--hidden-in-toc? headline-number tl-headline-number)
+                       (org-export-get-relative-level headline info))))
 		  (org-export-collect-headlines info depth scope))))
     (when toc-entries
       (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
