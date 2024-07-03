@@ -18,8 +18,9 @@
    Note that the code is in development and currently destructively
    modifies code of the html backend it is based on. This will be
    fixed as soon as the code gets finalized. When running this code,
-   single page html export will stop working until you have reloaded
-   ox-html.el
+   single page html export might stop working the way it has worked
+   before until the code ha been finalized. In that case it will be
+   working again as expected after reloading ox-html.el
    
 ** Installation
 

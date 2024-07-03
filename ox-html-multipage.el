@@ -464,8 +464,8 @@ copied into it with the :parent property removed in the top node."
   (let ((coding-system-for-write 'binary)
         (write-region-annotate-functions nil)
         (write-region-post-annotation-function nil))
-    (write-region (encode-coding-string string encoding)
-                  nil filename nil :silent)
+    ;; (write-region (encode-coding-string string encoding)
+    ;;               nil filename nil :silent)
     nil))
 
 ;;; TODO: org-html--get-multipage-page-url is html specific, should be
@@ -1206,12 +1206,13 @@ INFO is a plist used as a communication channel.
 
 DATA contains the supbtree of the section/page to export
 "
-  (format "<nav id=\"nav-left\"><a href=\"%s\">&lt;</a></nav>"
-          (or
-           (plist-get
-            (plist-get info :tl-section-urls)
-            :section-url-prev)
-           "")))
+  (let ((url-prev (plist-get
+                   (plist-get info :tl-section-urls)
+                   :section-url-prev)))
+    (if url-prev
+        (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-left\"></a></nav>"
+                url-prev)
+      "")))
 
 (defun org-html-nav-right (info data)
   "Return nav string for multipage Navigation.
@@ -1220,7 +1221,7 @@ INFO is a plist used as a communication channel.
 
 DATA contains the supbtree of the section/page to export
 "
-  (format "<nav id=\"nav-left\"><a href=\"%s\">&gt;</a></nav>"
+  (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-right\"></a></nav>"
           (or
            (plist-get
             (plist-get info :tl-section-urls)
