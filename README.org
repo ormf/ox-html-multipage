@@ -6,7 +6,7 @@
 
 ** License
 
-   GPL 2.0 see the file LICENSE
+   GPL 2.0 or later, see the file LICENSE
 
    Use at own risk, no warranties whatsoever
    
