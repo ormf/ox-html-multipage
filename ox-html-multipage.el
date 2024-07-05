@@ -498,8 +498,17 @@ headline-number."
                   nil filename nil :silent)
     nil))
 
-;;; TODO: org-html--get-multipage-page-url is html specific, should be
-;;; generic.
+;; TODO: org-html--get-multipage-page-url is html specific, should be
+;; generic.
+;; org-export--make-section-url-lookup
+
+(defun reverse-assoc-list (assoc-list)
+  (mapcar (lambda (entry) (list (cdr entry) (car entry))) assoc-list))
+
+(defun org-html--get-new-section-url-names (info)
+  nil
+  )
+
 
 (defun org-export-multipage-to-dir
     (backend dir &optional async subtreep visible-only body-only ext-plist
@@ -566,8 +575,8 @@ or DIR."
            (section-trees
             (cl-loop
              for section-entry in exported-headline-numbering
-             collect (let* ((section-numbering (cdr section-entry)))
-                       (if (< (length section-numbering) max-toc-depth)
+             collect (let* ((section-number (cdr section-entry)))
+                       (if (< (length section-number) max-toc-depth)
                            (org-remove-subheadlines
                             (car section-entry)
                             join-subheadlines-on-empty-body)
@@ -578,13 +587,31 @@ or DIR."
            (stripped-section-headline-numbering
             (cl-mapcar 'cons
                        (cl-loop for section in section-trees
+                                ;; collect the section headline rather than the subheadline:
                                 append (org-element-map section 'headline (lambda (x) x)))
                        (mapcar 'cdr headline-numbering)))
-           (section-url-lookup (plist-get info :section-url-lookup))
            (section-filenames (mapcar
-                               (lambda (section)
-                                 (org-html--headline-number-to-page-url (cdr section) info))
-                               exported-headline-numbering)))
+                               (lambda (hl-number)
+                                 (org-html--headline-number-to-page-url (cdr hl-number) info))
+                               exported-headline-numbering))
+           ;; lookup from all toc headline-numbers to the tl-headline.
+           ;; The headline number of a subheadline in a joined section
+           ;; returns the tl-headline of the section/page where it
+           ;; appears.
+           (tl-hl-lookup
+            (let* ((tl-headline-numbers (mapcar 'cdr exported-headline-numbering))
+                   (stripped-headlines (reverse-assoc-list stripped-section-headline-numbering))
+                   (tl-headline-lookup (mapcar (lambda (x)
+                                                 (list x (cadr (assoc x stripped-headlines))))
+                                               tl-headline-numbers))
+                   (toc-headline-numbers (mapcar 'cdr headline-numbering)))
+              (cl-loop
+               for toc-entry in toc-headline-numbers
+               collect (cl-loop
+                        for entry = toc-entry then (butlast entry)
+                        for result = (assoc entry tl-headline-lookup)
+                        if result return (cons toc-entry (cdr result))))))
+           )
       ;; add stripped-section-headline-numbering to
       ;; :headline-numbering, to make the headline-numbering
       ;; accessible when generating the body of the individual pages.
@@ -592,7 +619,7 @@ or DIR."
                  (append
                   headline-numbering
                   stripped-section-headline-numbering))
-
+      (plist-put info :tl-hl-lookup tl-hl-lookup)
       (plist-put info :stripped-section-headline-numbering
                  stripped-section-headline-numbering)
       (plist-put info :section-trees section-trees)
@@ -613,6 +640,8 @@ or DIR."
                              (mapcar 'car exported-headline-numbering))))
 
       (plist-put info :section-filenames section-filenames)
+      (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
+      
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
        for file in section-filenames
