@@ -19,8 +19,9 @@
    modifies code of the html backend it is based on. This will be
    fixed as soon as the code gets finalized. When running this code,
    single page html export might stop working the way it has worked
-   before until the code ha been finalized. In that case it will be
-   working again as expected after reloading ox-html.el
+   before until the code has been finalized. In that case reload
+   ox-html.el from your current org installation to make it work
+   again (or restart emacs).
    
 ** Installation
 
