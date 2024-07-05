@@ -443,10 +443,11 @@ link name in tree."
     info)
    info))
 
-(defun org-remove-subheadlines (org-node &optional remove-parent)
+(defun org-remove-subheadlines (org-node &optional join-empty-bodies remove-parent)
   "remove all elements starting with and including the first headline
-in the children of org-node. Returns a new ast with all elements
-copied into it with the :parent property removed in the top node."
+in the children of ORG-NODE. Returns a new ast with all elements
+starting at START-CHILD-IDX copied into it with the :parent
+property optionally removed in the top node."
   (let* (contents-end
          headline
          (props (copy-sequence (nth 1 org-node)))
@@ -454,13 +455,17 @@ copied into it with the :parent property removed in the top node."
          (new-children (cl-loop
                         for x in (org-element-contents org-node)
                         for i from 0
+                        with exit = nil
                         do (if (and
                                 (consp x)
                                 (eq (org-element-type x) 'headline))
-                               (progn
-                                 (setq contents-end (org-element-property :begin x))
-                                 (setq headline t)))
-                        until headline
+                               (if (and join-empty-bodies (= i 0))
+                                   (progn
+                                     (setq x (org-remove-subheadlines x join-empty-bodies)))
+                                 (progn
+                                   (setq contents-end (org-element-property :begin x))
+                                   (setq exit t))))
+                        until exit
                         collect x)))
     (if remove-parent (cl-remf props :parent))
     (apply 'org-element-adopt-elements new new-children)))
@@ -473,6 +478,17 @@ headline-number."
    ((equal headline-number (cdar headline-numbering))
     (caar headline-numbering))
    (t (find-headline headline-number (cdr headline-numbering)))))
+
+(defun body-empty? (element)
+  "check if first child of element is a headline"
+  (not (eq (org-element-type (car (org-element-contents element)))
+           'headline)))
+
+(defun join-empty-body (headlines)
+  (cl-loop for (prev curr-headline) on (cons nil headlines)
+           while curr-headline
+           if (body-empty? (car prev))
+           collect curr-headline))
 
 (defun write-string-to-file (string encoding filename)
   (let ((coding-system-for-write 'binary)
@@ -531,31 +547,39 @@ or DIR."
                                                         :multipage t)
                                           ext-plist))
 	   (encoding (or org-export-coding-system buffer-file-coding-system))
-           (info ;;; NEW: add a multipage processing hook returning an updated info plist.                  
+           (info ;;; NEW: added a multipage processing hook returning
+                 ;;; an updated info plist.
             (org-export--collect-multipage-tree-properties
              (org-export--collect-tree-info ;;; here everything happens!!!
               backend subtreep visible-only body-only ext-plist)))
            (headline-numbering (plist-get info :headline-numbering))
+           (join-subheadlines-on-empty-body t)
+           (stripped-section-subheadline-numbering '())
            (max-toc-depth (or (plist-get info :with-toc) 0))
            (exported-headline-numbering
-            (cl-remove-if (lambda (hl-num) (> (length hl-num) max-toc-depth))
-                          headline-numbering :key 'cdr))
-           ;; each entry in headline-numbering will become a single
-           ;; page in multipage output. We first generate a new
-           ;; headline-numbering with each entry being a copy of the
-           ;; original enries with removed subheadlines.
-           (stripped-section-headline-numbering
+            (join-empty-body
+             (cl-remove-if (lambda (hl-num) (> (length hl-num) max-toc-depth))
+                           headline-numbering :key 'cdr)))
+           ;; each entry in exported-headline-numbering will become a
+           ;; single page in multipage output. section-trees is a
+           ;; list of all sections which get exported to a single page
+           (section-trees
             (cl-loop
              for section-entry in exported-headline-numbering
-             append (let ((section-numbering (cdr section-entry)))
-                      (list (cons (if (< (length section-numbering) max-toc-depth)
-                                      (org-remove-subheadlines
-                                       (car section-entry))
-                                    (car section-entry))
-                                  (cdr section-entry))))))
-           ;; section-trees is a list of all sections which get
-           ;; exported to a single page
-           (section-trees (mapcar 'car stripped-section-headline-numbering))
+             collect (let* ((section-numbering (cdr section-entry)))
+                       (if (< (length section-numbering) max-toc-depth)
+                           (org-remove-subheadlines
+                            (car section-entry)
+                            join-subheadlines-on-empty-body)
+                         (car section-entry)))))
+           ;; stripped-section-headline-numbering is the equivalent of
+           ;; headline-numbering but replacing the car of its elements
+           ;; with the stripped version of the headlines.
+           (stripped-section-headline-numbering
+            (cl-mapcar 'cons
+                       (cl-loop for section in section-trees
+                                append (org-element-map section 'headline (lambda (x) x)))
+                       (mapcar 'cdr headline-numbering)))
            (section-url-lookup (plist-get info :section-url-lookup))
            (section-filenames (mapcar
                                (lambda (section)
@@ -569,27 +593,34 @@ or DIR."
                   headline-numbering
                   stripped-section-headline-numbering))
 
+      (plist-put info :stripped-section-headline-numbering
+                 stripped-section-headline-numbering)
+      (plist-put info :section-trees section-trees)
       (plist-put info :exported-headline-numbering
                  exported-headline-numbering)
       (plist-put info :section-filenames
                  section-filenames)
-      (plist-put info :stripped-section-hl-numbering
-                 stripped-section-headline-numbering)
       ;; maintain a assoc list between the stripped headlines and the
       ;; original headlines for link lookup of stripped headlines.
+
       (plist-put info :stripped-hl-to-parse-tree-hl
-                 (cl-mapcar 'cons
-                            (mapcar 'car stripped-section-headline-numbering)
-                            (mapcar 'car exported-headline-numbering)))
+                 (append
+                  (cl-mapcar 'cons
+                             (mapcar 'car stripped-section-headline-numbering)
+                             (mapcar 'car exported-headline-numbering))
+                  (cl-mapcar 'cons
+                             (mapcar 'car stripped-section-headline-numbering)
+                             (mapcar 'car exported-headline-numbering))))
+
       (plist-put info :section-filenames section-filenames)
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
        for file in section-filenames
-       for tl-hl-numbering in stripped-section-headline-numbering
+       for tl-headline in section-trees
        do
-       (let ((tl-headline (car tl-hl-numbering)))
+       (progn
          (plist-put info :tl-headline tl-headline)
-         (plist-put info :tl-headline-number (cdr tl-hl-numbering))
+         (plist-put info :tl-headline-number (alist-get tl-headline stripped-section-headline-numbering))
          (if async
              (org-export-async-start
                  (lambda (file) (org-export-add-to-stack (expand-file-name file) backend))
@@ -837,7 +868,8 @@ holding contextual information."
 	     (org-html-format-list-item
 	      contents (if numberedp 'ordered 'unordered)
 	      nil info nil
-	      (concat (org-html--anchor id nil nil info) formatted-text)) "\n"
+	      (concat (org-html--anchor id nil nil info) formatted-text))
+             "\n"
 	     (and (org-export-last-sibling-p headline info)
 		  (format "</%s>\n" html-type))))
 	;; Standard headline.  Export it as a section.
