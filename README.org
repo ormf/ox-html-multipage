@@ -21,7 +21,7 @@
    single page html export might stop working the way it has worked
    before until the code has been finalized. In that case reload
    ox-html.el from your current org installation to make it work
-   again (or restart emacs).
+   as before (or restart emacs).
    
 ** Installation
 
