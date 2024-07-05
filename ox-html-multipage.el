@@ -545,15 +545,14 @@ or DIR."
            ;; headline-numbering with each entry being a copy of the
            ;; original enries with removed subheadlines.
            (stripped-section-headline-numbering
-            (mapcar
-             (lambda (section-entry)
-               (let ((section-numbering (cdr section-entry)))
-                 (cons (if (< (length section-numbering) max-toc-depth)
-                           (org-remove-subheadlines
-                            (car section-entry))
-                         (car section-entry))
-                       (cdr section-entry))))
-             exported-headline-numbering))
+            (cl-loop
+             for section-entry in exported-headline-numbering
+             append (let ((section-numbering (cdr section-entry)))
+                      (list (cons (if (< (length section-numbering) max-toc-depth)
+                                      (org-remove-subheadlines
+                                       (car section-entry))
+                                    (car section-entry))
+                                  (cdr section-entry))))))
            ;; section-trees is a list of all sections which get
            ;; exported to a single page
            (section-trees (mapcar 'car stripped-section-headline-numbering))
