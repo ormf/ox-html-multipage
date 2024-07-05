@@ -410,7 +410,12 @@ channel."
    info
    (list :section-url-lookup
          (org-export--make-section-url-lookup
-          (plist-get info :headline-numbering)
+          (cl-remove-if
+           (lambda (hl-num)
+             (> (length hl-num)
+                (or (plist-get info :with-toc) 0)))
+           (plist-get info :headline-numbering)
+           :key 'cdr)
           (plist-get info :file-extension)))))
 
 (defun org-export--get-headline-number (element info)
@@ -460,12 +465,21 @@ copied into it with the :parent property removed in the top node."
     (if remove-parent (cl-remf props :parent))
     (apply 'org-element-adopt-elements new new-children)))
 
+(defun find-headline (headline-number headline-numbering)
+  "return the headline in headline numbering for a given
+headline-number."
+  (cond
+   ((null headline-numbering) nil)
+   ((equal headline-number (cdar headline-numbering))
+    (caar headline-numbering))
+   (t (find-headline headline-number (cdr headline-numbering)))))
+
 (defun write-string-to-file (string encoding filename)
   (let ((coding-system-for-write 'binary)
         (write-region-annotate-functions nil)
         (write-region-post-annotation-function nil))
-    ;; (write-region (encode-coding-string string encoding)
-    ;;               nil filename nil :silent)
+    (write-region (encode-coding-string string encoding)
+                  nil filename nil :silent)
     nil))
 
 ;;; TODO: org-html--get-multipage-page-url is html specific, should be
@@ -522,6 +536,10 @@ or DIR."
              (org-export--collect-tree-info ;;; here everything happens!!!
               backend subtreep visible-only body-only ext-plist)))
            (headline-numbering (plist-get info :headline-numbering))
+           (max-toc-depth (or (plist-get info :with-toc) 0))
+           (exported-headline-numbering
+            (cl-remove-if (lambda (hl-num) (> (length hl-num) max-toc-depth))
+                          headline-numbering :key 'cdr))
            ;; each entry in headline-numbering will become a single
            ;; page in multipage output. We first generate a new
            ;; headline-numbering with each entry being a copy of the
@@ -529,18 +547,21 @@ or DIR."
            (stripped-section-headline-numbering
             (mapcar
              (lambda (section-entry)
-               (cons (org-remove-subheadlines
-                      (car section-entry))
-                     (cdr section-entry)))
-             headline-numbering))
+               (let ((section-numbering (cdr section-entry)))
+                 (cons (if (< (length section-numbering) max-toc-depth)
+                           (org-remove-subheadlines
+                            (car section-entry))
+                         (car section-entry))
+                       (cdr section-entry))))
+             exported-headline-numbering))
            ;; section-trees is a list of all sections which get
            ;; exported to a single page
            (section-trees (mapcar 'car stripped-section-headline-numbering))
            (section-url-lookup (plist-get info :section-url-lookup))
            (section-filenames (mapcar
                                (lambda (section)
-                                 (org-html--get-multipage-page-url section info))
-                               (mapcar 'car headline-numbering))))
+                                 (org-html--headline-number-to-page-url (cdr section) info))
+                               exported-headline-numbering)))
       ;; add stripped-section-headline-numbering to
       ;; :headline-numbering, to make the headline-numbering
       ;; accessible when generating the body of the individual pages.
@@ -548,12 +569,19 @@ or DIR."
                  (append
                   headline-numbering
                   stripped-section-headline-numbering))
+
+      (plist-put info :exported-headline-numbering
+                 exported-headline-numbering)
+      (plist-put info :section-filenames
+                 section-filenames)
+      (plist-put info :stripped-section-hl-numbering
+                 stripped-section-headline-numbering)
       ;; maintain a assoc list between the stripped headlines and the
       ;; original headlines for link lookup of stripped headlines.
       (plist-put info :stripped-hl-to-parse-tree-hl
                  (cl-mapcar 'cons
                             (mapcar 'car stripped-section-headline-numbering)
-                            (mapcar 'car headline-numbering)))
+                            (mapcar 'car exported-headline-numbering)))
       (plist-put info :section-filenames section-filenames)
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
@@ -637,6 +665,13 @@ Return output directory's name."
 (defun org-html--get-multipage-page-url (element info)
   "Return the url of the page containing ELEMENT."
   (plist-get (org-html--get-multipage-section-urls element info) :section-url))
+
+(defun org-html--headline-number-to-page-url (headline-number info)
+  (plist-get
+   (alist-get
+    headline-number
+    (plist-get info :section-url-lookup))
+   :section-url))
 
 ;;; rewritten functions from ox-html:
 
@@ -1210,23 +1245,26 @@ DATA contains the supbtree of the section/page to export
                    (plist-get info :tl-section-urls)
                    :section-url-prev)))
     (if url-prev
-        (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-left\"></a></nav>"
+        (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-left\"><i class=\"angle-left\"></i></a></nav>"
                 url-prev)
-      "")))
+      (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-left\"><i class=\"angle-left-inactive\"></i></a></nav>"
+                ""))))
 
 (defun org-html-nav-right (info data)
   "Return nav string for multipage Navigation.
 
 INFO is a plist used as a communication channel.
 
-DATA contains the supbtree of the section/page to export
+DATA contains the subtree of the section/page to export
 "
-  (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-right\"></a></nav>"
-          (or
-           (plist-get
-            (plist-get info :tl-section-urls)
-            :section-url-next)
-           "")))
+  (let ((url-next (plist-get
+                   (plist-get info :tl-section-urls)
+                   :section-url-next)))
+    (if url-next
+        (format "<nav id=\"nav-right\"><a href=\"%s\" class=\"nav-right\"><i class=\"angle-right\"></i></a></nav>"
+                url-next)
+      (format "<nav id=\"nav-right\"><a href=\"%s\" class=\"nav-right\"><i class=\"angle-right-inactive\"></i></a></nav>"
+                ""))))
 
 (defun org-html-template (contents info)
   "Return complete document string after HTML conversion.
@@ -1326,10 +1364,8 @@ exported for multipage export.
           (plist-get global-info :tl-headline-number)
           (plist-get global-info :section-url-lookup))))
     (format "<div id=\"page-main-body\">\n%s\n<div id=\"page-text-body\">%s</div>%s</div>"
-            (if (plist-get info :multipage)
-                (org-html-nav-left
-                 (cl-list* :tl-section-urls tl-section-urls info) data)
-              "")
+            (org-html-nav-left
+             (cl-list* :tl-section-urls tl-section-urls info) data)
             (concat
              ;; Document contents.
              contents
@@ -1337,10 +1373,8 @@ exported for multipage export.
              (or (org-html-footnote-section info data) "")
              ;; Postamble.
              (org-html--build-pre/postamble 'postamble info))
-            (if (plist-get info :multipage)
-                (org-html-nav-right
-                 (cl-list* :tl-section-urls tl-section-urls info) data)
-              ""))))
+            (org-html-nav-right
+             (cl-list* :tl-section-urls tl-section-urls info) data))))
 
 ;;; adjust different reference sections:
 
