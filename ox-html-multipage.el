@@ -67,8 +67,7 @@ for inlined footnotes.  Unreferenced definitions are ignored."
   "Parse current Org Buffer into a tree suitable for final
 processing for the BACKEND and store it in the :parse-tree
 property of info along with additional entries like
-:headline-numbering :section-url-lookup and :id-alist. Return
-info.
+:headline-numbering and :id-alist. Return info.
 
 BACKEND is either an export back-end, as returned by, e.g.,
 `org-export-create-backend', or a symbol referring to
@@ -283,9 +282,6 @@ Return code as a string."
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
-
-
 (setq org-export-dictionary
       (append
        '(("Section %s"
@@ -334,6 +330,16 @@ Return code as a string."
           ("de" :default "Abb. %s")))
        org-export-dictionary))
 
+(defun org-element-get-top-level (element)
+  "Return the top-level element of ELEMENT by traversing the parse
+tree upwards until the parent of element is nil/doesn't exist."
+  (let ((elem element)
+        (parent (org-element-property :parent element)))
+    (while parent
+      (setq elem parent)
+      (setq parent (org-element-property :parent elem)))
+    elem))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;; Code specific to the multipage backend (currently html centric)
@@ -352,7 +358,7 @@ Return code as a string."
 
 (defun string-to-backend-filename (string extension)
    (format
-    "%s%s"
+    "%s.%s"
     (remove-chars
      '("(" ")" "," ";" "{" "}" "'" "\\")
      (replace-chars-with-dash
@@ -403,6 +409,69 @@ its navigation."
           (plist-put (cdr lookup) :section-up-url (plist-get up :section-url)))))
     url-lookup))
 
+(defun org-element-title (element)
+  (org-element-property :raw-value element))
+
+(defun org-export--make-section-nav-lookup (info)
+  "Return an assoc-list containing entries for all headline-numbers
+with a plist containing title and headlines for the section and
+its navigation."
+  (let* ((hl-lookup (plist-get global-info :tl-hl-lookup)))
+    (cl-loop
+     with accum = '()
+     for prev-entry = nil then curr-entry
+     for curr-entry on (plist-get global-info :stripped-section-headline-numbering)
+     for next-entry = (cdr curr-entry)
+     for curr = (caar curr-entry)
+     ;; find prev entry with a different toplevel-hl than curr:
+     for prev = (let ((tmp-hl (caar prev-entry))
+                      (curr-tl (org-element-get-top-level curr))
+                      (past-hl accum))
+                  (while (and tmp-hl
+                              (eq (org-element-get-top-level tmp-hl)
+                                  curr-tl))
+                    (setf tmp-hl (car past-hl))
+                    (setf past-hl (cdr past-hl)))
+                  tmp-hl)
+     ;; find next entry with a different toplevel-hl than curr:
+     for next = (let ((tmp-hl (caar next-entry))
+                      (curr-tl (org-element-get-top-level curr))
+                      (next-hl-entry (cdr next-entry)))
+                  (while (and tmp-hl
+                              (eq (org-element-get-top-level tmp-hl)
+                                  curr-tl))
+                    (setf tmp-hl (caar next-hl-entry))
+                    (setf next-hl-entry (cdr next-hl-entry)))
+                  tmp-hl)
+     for headline-number = (cdar curr-entry)
+     for up = (cdr (assoc (butlast headline-number) hl-lookup))
+     do (push curr accum)
+     collect (list headline-number
+                   :section-headline curr
+                   :section-title (org-element-title curr)
+                   :next-headline next
+                   :next-title (org-element-title next)
+                   :prev-headline prev
+                   :prev-title (org-element-title prev)
+                   :up-headline up
+                   :up-title (org-element-title up)))))
+
+(defun org-html--generate-tl-url-names (stripped-section-headline-numbering info)
+  "generate an assoc list between all headlines appearing in the toc
+and the url names of the page they're on."
+  (let ((extension (plist-get info :html-extension)))
+    (mapcar
+     (lambda (entry)
+       (let* ((tl-elem (org-element-get-top-level (car entry)))
+              (title (org-element-title tl-elem)))
+         (cons
+          (car entry)
+          (string-prepend-chapters
+           (string-to-backend-filename title extension)
+           (cdr (assoc tl-elem stripped-section-headline-numbering))
+           org-export-headline-levels))))
+    stripped-section-headline-numbering)))
+
 (defun org-export--collect-multipage-tree-properties (info)
   "add :section-url-lookup entry to info. INFO is used as communication
 channel."
@@ -442,6 +511,15 @@ link name in tree."
       nil t)
     info)
    info))
+
+(defun org-element-copy-element (org-node &optional keep-parent)
+  "copy ORG-NODE to a new org-node with elements not copied,
+but referenced."
+  (let* (headline
+         (props (copy-sequence (nth 1 org-node)))
+         (new (list (car org-node) props)))
+    (unless keep-parent (cl-remf props :parent))
+    (apply 'org-element-adopt-elements new (org-element-contents org-node))))
 
 (defun org-remove-subheadlines (org-node &optional join-empty-bodies keep-parent)
   "remove all elements starting with and including the first headline
@@ -509,7 +587,6 @@ headline-number."
   nil
   )
 
-
 (defun org-export-multipage-to-dir
     (backend dir &optional async subtreep visible-only body-only ext-plist
 	     post-process)
@@ -558,13 +635,11 @@ or DIR."
 	   (encoding (or org-export-coding-system buffer-file-coding-system))
            (info ;;; NEW: added a multipage processing hook returning
                  ;;; an updated info plist.
-            (org-export--collect-multipage-tree-properties
-             (org-export--collect-tree-info ;;; here everything happens!!!
-              backend subtreep visible-only body-only ext-plist)))
+            (org-export--collect-tree-info ;;; here everything happens!!!
+             backend subtreep visible-only body-only ext-plist))
            (headline-numbering (plist-get info :headline-numbering))
            (pt-hl-lookup (reverse-assoc-list headline-numbering))
            (join-subheadlines-on-empty-body t)
-           (stripped-section-subheadline-numbering '())
            (max-toc-depth (or (plist-get info :with-toc) 0))
            (exported-headline-numbering
             (join-empty-body
@@ -581,40 +656,24 @@ or DIR."
                            (org-remove-subheadlines
                             (car section-entry)
                             join-subheadlines-on-empty-body)
-                         (car section-entry)))))
+                         (org-element-copy-element (car section-entry))))))
            ;; stripped-section-headline-numbering is the equivalent of
            ;; headline-numbering but replacing the car of its elements
            ;; with the stripped version of the headlines.
            (stripped-section-headline-numbering
             (cl-mapcar 'cons
                        (cl-loop for section in section-trees
-                                ;; collect the section headline rather than the subheadline:
+                                ;; collect all subheadlines to match
+                                ;; headline-numbering:
                                 append (org-element-map section 'headline (lambda (x) x)))
                        (mapcar 'cdr headline-numbering)))
-           (section-filenames (mapcar
-                               (lambda (hl-number)
-                                 (org-html--headline-number-to-page-url (cdr hl-number) info))
-                               exported-headline-numbering))
            ;; lookup from all toc headline-numbers to the tl-headline.
-           ;; The headline number of a subheadline in a joined section
-           ;; returns the tl-headline of the section/page where it
-           ;; appears.
-           (tl-hl-lookup
-            (let* ((tl-headline-numbers (mapcar 'cdr exported-headline-numbering))
-                   (stripped-headlines (reverse-assoc-list stripped-section-headline-numbering))
-                   (tl-headline-lookup (mapcar (lambda (x)
-                                                 (cons x (cdr (assoc x stripped-headlines))))
-                                               tl-headline-numbers))
-                   (toc-headline-numbers (mapcar 'cdr headline-numbering)))
-              (cl-loop
-               for toc-entry in toc-headline-numbers
-               collect (cl-loop
-                        for entry = toc-entry then (butlast entry)
-                        for result = (assoc entry tl-headline-lookup)
-                        if result return (cons toc-entry (cdr result))))))
-           
-                        
-           )
+           (tl-hl-lookup (reverse-assoc-list stripped-section-headline-numbering))
+           (section-nav-lookup (org-export--make-section-nav-lookup stripped-section-headline-numbering))
+           (tl-url-lookup (org-html--generate-tl-url-names stripped-section-headline-numbering info))
+           (section-filenames (mapcar
+                               (lambda (hl) (alist-get hl tl-url-lookup))
+                               section-trees)))
       ;; add stripped-section-headline-numbering to
       ;; :headline-numbering, to make the headline-numbering
       ;; accessible when generating the body of the individual pages.
@@ -623,6 +682,8 @@ or DIR."
                   headline-numbering
                   stripped-section-headline-numbering))
       (plist-put info :tl-hl-lookup tl-hl-lookup)
+      (plist-put info :section-nav-lookup section-nav-lookup)
+      (plist-put info :tl-url-lookup tl-url-lookup)
       (plist-put info :pt-hl-lookup pt-hl-lookup)
       (plist-put info :stripped-section-headline-numbering
                  stripped-section-headline-numbering)
@@ -780,11 +841,7 @@ return the reference with full url-name of the page in the form
 	   (not user-label))
       nil)
      (t
-      (if (and (plist-get info :multipage) (not stripped))
-          (format "%s#%s"
-                  (org-html--get-multipage-page-url datum info)
-                  (org-export-get-reference datum info))
-        (format "%s" (org-export-get-reference datum info)))))))
+      (format "%s" (org-export-get-reference datum info))))))
 
 (defun org-html-footnote-reference (footnote-reference _contents info)
   "Transcode a FOOTNOTE-REFERENCE element from Org to HTML.
@@ -1201,11 +1258,9 @@ INFO is a plist used as a communication channel."
             (if (plist-get info :multipage)
                 (format "href=\"%s\"%s"
                         (concat
-                         (plist-get
-                          (alist-get
-                           headline-number
-                           (plist-get info :section-url-lookup))
-                          :section-url)
+                         (alist-get
+                          headline
+                          (plist-get global-info :tl-url-lookup))
                          (format "#%s" (org-html--reference headline info)))
                         (if (equal headline-number tl-headline-number)
                             "class=\"toc-entry toc-active\""
