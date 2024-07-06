@@ -788,14 +788,22 @@ Return output directory's name."
 
 (defun org-html--get-multipage-page-url (element info)
   "Return the url of the page containing ELEMENT."
-  (plist-get (org-html--get-multipage-section-urls element info) :section-url))
+  (alist-get
+   (cdr
+    (assoc
+     (org-export-get-headline-number
+      element
+      global-info)
+     (plist-get global-info :tl-hl-lookup)))
+   (plist-get global-info :tl-url-lookup)))
 
 (defun org-html--headline-number-to-page-url (headline-number info)
-  (plist-get
-   (alist-get
-    headline-number
-    (plist-get info :section-url-lookup))
-   :section-url))
+  (alist-get
+   (cdr
+    (assoc
+     headline-number
+     (plist-get global-info :tl-hl-lookup)))
+   (plist-get global-info :tl-url-lookup)))
 
 ;;; rewritten functions from ox-html:
 
@@ -990,6 +998,13 @@ holding contextual information."
                     (concat (org-html-section first-content "" info) contents))
                   (org-html--container headline info)))))))
 
+(defun org-html--full-reference (destination info)
+  (if (plist-get info :multipage)
+      (concat
+       (org-html--get-multipage-page-url destination info)
+       (format "#%s" (org-export-get-reference destination info)))
+    (org-html--reference destination info)))
+
 (defun org-html-link (link desc info)
   "Transcode a LINK object from Org to HTML.
 DESC is the description part of the link, or the empty string.
@@ -1105,7 +1120,7 @@ INFO is a plist holding contextual information.  See
 			(org-element-property :raw-link link) info))))
 	  ;; Link points to a headline.
 	  (`headline
-	   (let ((href (org-html--reference destination info))
+	   (let ((href (org-html--full-reference destination info))
 		 ;; What description to use?
 		 (desc
 		  ;; Case 1: Headline is numbered and LINK has no
@@ -1129,9 +1144,7 @@ INFO is a plist holding contextual information.  See
 		    (or desc
 			(org-export-data
 			 (org-element-property :title destination) info)))))
-	     (if (plist-get info :multipage)
-                 (format "<a href=\"%s\"%s>%s</a>" href attributes desc)
-               (format "<a href=\"#%s\"%s>%s</a>" href attributes desc))))
+             (format "<a href=\"%s\"%s>%s</a>" href attributes desc)))
 	  ;; Fuzzy link points to a target or an element.
 	  (_
            (if (and destination
@@ -1166,9 +1179,7 @@ INFO is a plist holding contextual information.  See
 			   ((numberp numbered-ref) (number-to-string number))
                            ((stringp numbered-ref) numbered-ref)
 			   (t (mapconcat #'number-to-string number ".")))))
-               (if (plist-get info :multipage)
-                   (format "<a href=\"%s\"%s>%s</a>" ref attributes desc)
-                 (format "<a href=\"#%s\"%s>%s</a>" ref attributes desc))))))))
+               (format "<a href=\"#%s\"%s>%s</a>" ref attributes desc)))))))
      ;; Coderef: replace link with the reference name or the
      ;; equivalent line number.
      ((string= type "coderef")
