@@ -443,7 +443,7 @@ link name in tree."
     info)
    info))
 
-(defun org-remove-subheadlines (org-node &optional join-empty-bodies remove-parent)
+(defun org-remove-subheadlines (org-node &optional join-empty-bodies keep-parent)
   "remove all elements starting with and including the first headline
 in the children of ORG-NODE. Returns a new ast with all elements
 starting at START-CHILD-IDX copied into it with the :parent
@@ -467,7 +467,7 @@ property optionally removed in the top node."
                                    (setq exit t))))
                         until exit
                         collect x)))
-    (if remove-parent (cl-remf props :parent))
+    (unless keep-parent (cl-remf props :parent))
     (apply 'org-element-adopt-elements new new-children)))
 
 (defun find-headline (headline-number headline-numbering)
@@ -503,7 +503,7 @@ headline-number."
 ;; org-export--make-section-url-lookup
 
 (defun reverse-assoc-list (assoc-list)
-  (mapcar (lambda (entry) (list (cdr entry) (car entry))) assoc-list))
+  (mapcar (lambda (entry) (cons (cdr entry) (car entry))) assoc-list))
 
 (defun org-html--get-new-section-url-names (info)
   nil
@@ -562,6 +562,7 @@ or DIR."
              (org-export--collect-tree-info ;;; here everything happens!!!
               backend subtreep visible-only body-only ext-plist)))
            (headline-numbering (plist-get info :headline-numbering))
+           (pt-hl-lookup (reverse-assoc-list headline-numbering))
            (join-subheadlines-on-empty-body t)
            (stripped-section-subheadline-numbering '())
            (max-toc-depth (or (plist-get info :with-toc) 0))
@@ -602,7 +603,7 @@ or DIR."
             (let* ((tl-headline-numbers (mapcar 'cdr exported-headline-numbering))
                    (stripped-headlines (reverse-assoc-list stripped-section-headline-numbering))
                    (tl-headline-lookup (mapcar (lambda (x)
-                                                 (list x (cadr (assoc x stripped-headlines))))
+                                                 (cons x (cdr (assoc x stripped-headlines))))
                                                tl-headline-numbers))
                    (toc-headline-numbers (mapcar 'cdr headline-numbering)))
               (cl-loop
@@ -611,6 +612,8 @@ or DIR."
                         for entry = toc-entry then (butlast entry)
                         for result = (assoc entry tl-headline-lookup)
                         if result return (cons toc-entry (cdr result))))))
+           
+                        
            )
       ;; add stripped-section-headline-numbering to
       ;; :headline-numbering, to make the headline-numbering
@@ -620,6 +623,7 @@ or DIR."
                   headline-numbering
                   stripped-section-headline-numbering))
       (plist-put info :tl-hl-lookup tl-hl-lookup)
+      (plist-put info :pt-hl-lookup pt-hl-lookup)
       (plist-put info :stripped-section-headline-numbering
                  stripped-section-headline-numbering)
       (plist-put info :section-trees section-trees)
@@ -877,12 +881,7 @@ holding contextual information."
            (full-text (funcall (plist-get info :html-format-headline-function)
                                todo todo-type priority text tags info))
            (contents (or contents ""))
-	   (id (org-html--reference
-                (or (alist-get ;; for multipage context, otherwise nil
-                     headline
-                     (plist-get info :stripped-hl-to-parse-tree-hl))
-                    headline)
-                info nil t))
+	   (id (org-html--reference headline info nil t))
 	   (formatted-text
 	    (if (plist-get info :html-self-link-headlines)
 		(format "<a href=\"#%s\">%s</a>" id full-text)
@@ -1222,6 +1221,17 @@ INFO is a plist used as a communication channel."
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
 
+(defun org-export-collect-local-headlines (info depth scope)
+  "collect all toc headlines converted to local tl-headlines."
+  (let ((tl-headline-lookup (plist-get info :tl-hl-lookup))
+        (headline-numbering (plist-get info :headline-numbering)))
+    (mapcar
+     (lambda (pt-headline)
+       (cdr
+        (assoc (cdr (assoc pt-headline headline-numbering))
+               tl-headline-lookup)))
+     (org-export-collect-headlines info depth scope))))
+
 (defun org-html-toc (depth info &optional scope)
   "Build a table of contents.
 DEPTH is an integer specifying the depth of the table.  INFO is
@@ -1239,7 +1249,7 @@ of contents as a string, or nil if it is empty."
                        (org-html--hidden-in-toc? headline-number
                                                  (plist-get info :tl-headline-number))
                        (org-export-get-relative-level headline info))))
-		  (org-export-collect-headlines info depth scope))))
+		  (org-export-collect-local-headlines info depth scope))))
     (when toc-entries
       (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
 			 (org-html--toc-text toc-entries)
