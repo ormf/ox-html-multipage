@@ -1241,6 +1241,7 @@ and value is its relative level, as an integer."
 INFO is a plist used as a communication channel."
   (let* ((headline-number (org-export-get-headline-number headline info))
          (tl-headline-number (plist-get info :tl-headline-number))
+         (tl-headline (plist-get info :tl-headline))
 	 (todo (and (plist-get info :with-todo-keywords)
 		    (let ((todo (org-element-property :todo-keyword headline)))
 		      (and todo (org-export-data todo info)))))
@@ -1262,7 +1263,7 @@ INFO is a plist used as a communication channel."
                           headline
                           (plist-get info :tl-url-lookup))
                          (format "#%s" (org-html--reference headline info)))
-                        (if (equal headline-number tl-headline-number)
+                        (if (equal (org-element-get-top-level headline) tl-headline)
                             "class=\"toc-entry toc-active\""
                           "class=\"toc-entry\""))
               (format "#%s" (org-html--reference headline info)))
@@ -1301,7 +1302,7 @@ of contents as a string, or nil if it is empty."
                        (org-html--format-toc-headline
                         headline
                         info)
-                       (org-html--hidden-in-toc? headline-number
+                       (org-html--hidden-in-toc? (org-element-get-top-level headline-number)
                                                  (plist-get info :tl-headline-number))
                        (org-export-get-relative-level headline info))))
 		  (org-export-collect-local-headlines info depth scope))))
