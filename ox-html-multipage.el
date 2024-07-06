@@ -412,49 +412,49 @@ its navigation."
 (defun org-element-title (element)
   (org-element-property :raw-value element))
 
-(defun org-export--make-section-nav-lookup (info)
+(defun org-export--make-section-nav-lookup (stripped-section-headline-numbering hl-lookup)
   "Return an assoc-list containing entries for all headline-numbers
 with a plist containing title and headlines for the section and
 its navigation."
-  (let* ((hl-lookup (plist-get global-info :tl-hl-lookup)))
-    (cl-loop
-     with accum = '()
-     for prev-entry = nil then curr-entry
-     for curr-entry on (plist-get global-info :stripped-section-headline-numbering)
-     for next-entry = (cdr curr-entry)
-     for curr = (caar curr-entry)
-     ;; find prev entry with a different toplevel-hl than curr:
-     for prev = (let ((tmp-hl (caar prev-entry))
-                      (curr-tl (org-element-get-top-level curr))
-                      (past-hl accum))
-                  (while (and tmp-hl
-                              (eq (org-element-get-top-level tmp-hl)
-                                  curr-tl))
-                    (setf tmp-hl (car past-hl))
-                    (setf past-hl (cdr past-hl)))
-                  tmp-hl)
-     ;; find next entry with a different toplevel-hl than curr:
-     for next = (let ((tmp-hl (caar next-entry))
-                      (curr-tl (org-element-get-top-level curr))
-                      (next-hl-entry (cdr next-entry)))
-                  (while (and tmp-hl
-                              (eq (org-element-get-top-level tmp-hl)
-                                  curr-tl))
-                    (setf tmp-hl (caar next-hl-entry))
-                    (setf next-hl-entry (cdr next-hl-entry)))
-                  tmp-hl)
-     for headline-number = (cdar curr-entry)
-     for up = (cdr (assoc (butlast headline-number) hl-lookup))
-     do (push curr accum)
-     collect (list headline-number
-                   :section-headline curr
-                   :section-title (org-element-title curr)
-                   :next-headline next
-                   :next-title (org-element-title next)
-                   :prev-headline prev
-                   :prev-title (org-element-title prev)
-                   :up-headline up
-                   :up-title (org-element-title up)))))
+  (cl-loop
+   with accum = '()
+   for prev-entry = nil then curr-entry
+   for curr-entry on stripped-section-headline-numbering
+   for next-entry = (cdr curr-entry)
+   for curr = (caar curr-entry)
+   ;; find prev entry with a different toplevel-hl than curr:
+   for prev = (let ((tmp-hl (caar prev-entry))
+                    (curr-tl (org-element-get-top-level curr))
+                    (past-hl accum))
+                (while (and tmp-hl
+                            (eq (org-element-get-top-level tmp-hl)
+                                curr-tl))
+                  (setf tmp-hl (car past-hl))
+                  (setf past-hl (cdr past-hl)))
+                tmp-hl)
+   ;; find next entry with a different toplevel-hl than curr:
+   for next = (let ((tmp-hl (caar next-entry))
+                    (curr-tl (org-element-get-top-level curr))
+                    (next-hl-entry (cdr next-entry)))
+                (while (and tmp-hl
+                            (eq (org-element-get-top-level tmp-hl)
+                                curr-tl))
+                  (setf tmp-hl (caar next-hl-entry))
+                  (setf next-hl-entry (cdr next-hl-entry)))
+                tmp-hl)
+   for headline = (caar curr-entry)
+   for headline-number = (cdar curr-entry)
+   for up = (cdr (assoc (butlast headline-number) hl-lookup))
+   do (push curr accum)
+   collect (list curr
+                 :section-headline curr
+                 :section-title (org-element-title curr)
+                 :next-headline next
+                 :next-title (org-element-title next)
+                 :prev-headline prev
+                 :prev-title (org-element-title prev)
+                 :up-headline up
+                 :up-title (org-element-title up))))
 
 (defun org-html--generate-tl-url-names (stripped-section-headline-numbering info)
   "generate an assoc list between all headlines appearing in the toc
@@ -669,8 +669,8 @@ or DIR."
                        (mapcar 'cdr headline-numbering)))
            ;; lookup from all toc headline-numbers to the tl-headline.
            (tl-hl-lookup (reverse-assoc-list stripped-section-headline-numbering))
-           (section-nav-lookup (org-export--make-section-nav-lookup stripped-section-headline-numbering))
            (tl-url-lookup (org-html--generate-tl-url-names stripped-section-headline-numbering info))
+           (section-nav-lookup (org-export--make-section-nav-lookup stripped-section-headline-numbering tl-hl-lookup))
            (section-filenames (mapcar
                                (lambda (hl) (alist-get hl tl-url-lookup))
                                section-trees)))
@@ -1260,7 +1260,7 @@ INFO is a plist used as a communication channel."
                         (concat
                          (alist-get
                           headline
-                          (plist-get global-info :tl-url-lookup))
+                          (plist-get info :tl-url-lookup))
                          (format "#%s" (org-html--reference headline info)))
                         (if (equal headline-number tl-headline-number)
                             "class=\"toc-entry toc-active\""
@@ -1359,36 +1359,51 @@ INFO is a plist used as a communication channel."
 	 definitions
 	 "\n"))))))
 
-(defun org-html-nav-left (info data)
+
+
+(defun org-html-nav-left (info)
   "Return nav string for multipage Navigation.
 
 INFO is a plist used as a communication channel.
-
-DATA contains the supbtree of the section/page to export
 "
-  (let ((url-prev (plist-get
-                   (plist-get info :tl-section-urls)
-                   :section-url-prev)))
-    (if url-prev
+  (let* ((url-lookup (plist-get info :tl-url-lookup))
+         (nav-lookup (plist-get info :section-nav-lookup))
+         (prev-url (cdr (assoc (plist-get nav-lookup :prev-headline) url-lookup)))
+         (prev-title (plist-get nav-lookup :prev-title)))
+    (if prev-url
         (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-left\"><i class=\"angle-left\"></i></a></nav>"
-                url-prev)
+                prev-url)
       (format "<nav id=\"nav-left\"><a href=\"%s\" class=\"nav-left\"><i class=\"angle-left-inactive\"></i></a></nav>"
-                ""))))
+              ""))))
 
-(defun org-html-nav-right (info data)
+(defun org-html-nav-right (info)
   "Return nav string for multipage Navigation.
 
 INFO is a plist used as a communication channel.
-
-DATA contains the subtree of the section/page to export
 "
-  (let ((url-next (plist-get
-                   (plist-get info :tl-section-urls)
-                   :section-url-next)))
-    (if url-next
+  (let* ((url-lookup (plist-get info :tl-url-lookup))
+         (nav-lookup (plist-get info :section-nav-lookup))
+         (next-url (cdr (assoc (plist-get nav-lookup :next-headline) url-lookup)))
+         (next-title (plist-get nav-lookup :next-title)))
+    (if next-url
         (format "<nav id=\"nav-right\"><a href=\"%s\" class=\"nav-right\"><i class=\"angle-right\"></i></a></nav>"
-                url-next)
+                next-url)
       (format "<nav id=\"nav-right\"><a href=\"%s\" class=\"nav-right\"><i class=\"angle-right-inactive\"></i></a></nav>"
+              ""))))
+
+(defun org-html-nav-up (info)
+  "Return nav string for multipage Navigation.
+
+INFO is a plist used as a communication channel.
+"
+  (let* ((url-lookup (plist-get info :tl-url-lookup))
+         (nav-lookup (plist-get info :section-nav-lookup))
+         (up-url (cdr (assoc (plist-get nav-lookup :up-headline) url-lookup)))
+         (up-title (plist-get nav-lookup :up-title)))
+    (if up-url
+        (format "<nav id=\"nav-up\"><a href=\"%s\" class=\"nav-up\"><i class=\"angle-up\"></i></a></nav>"
+                up-url)
+      (format "<nav id=\"nav-up\"><a href=\"%s\" class=\"nav-up\"><i class=\"angle-up-inactive\"></i></a></nav>"
                 ""))))
 
 (defun org-html-template (contents info)
@@ -1484,13 +1499,13 @@ DATA contains the subtree of the parse tree of the section to be
 exported for multipage export.
 "
   ;; Navigation
-  (let ((tl-section-urls
-         (alist-get
-          (plist-get global-info :tl-headline-number)
-          (plist-get global-info :section-url-lookup))))
-    (format "<div id=\"page-main-body\">\n%s\n<div id=\"page-text-body\">%s</div>%s</div>"
+  (let ((section-nav-lookup
+         (cdr (assoc data (plist-get info :section-nav-lookup)))))
+    (format "<div id=\"page-main-body\">%s\n%s\n<div id=\"page-text-body\">%s</div>%s</div>"
+            (org-html-nav-up
+             (cl-list* :section-nav-lookup section-nav-lookup info))
             (org-html-nav-left
-             (cl-list* :tl-section-urls tl-section-urls info) data)
+             (cl-list* :section-nav-lookup section-nav-lookup info))
             (concat
              ;; Document contents.
              contents
@@ -1499,7 +1514,8 @@ exported for multipage export.
              ;; Postamble.
              (org-html--build-pre/postamble 'postamble info))
             (org-html-nav-right
-             (cl-list* :tl-section-urls tl-section-urls info) data))))
+             (cl-list* :section-nav-lookup section-nav-lookup info))
+            )))
 
 ;;; adjust different reference sections:
 
