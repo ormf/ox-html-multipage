@@ -1294,16 +1294,25 @@ DEPTH is an integer specifying the depth of the table.  INFO is
 a plist used as a communication channel.  Optional argument SCOPE
 is an element defining the scope of the table.  Return the table
 of contents as a string, or nil if it is empty."
-  (let* ((toc-entries
+  (let* ((tl-headline-number (plist-get info :tl-headline-number))
+         (tl-headline (plist-get info :tl-headline))
+         (curr-number-ref tl-headline-number)
+         (toc-entries
 	  (mapcar (lambda (headline)
-                    (let ((headline-number
-                           (org-export-get-headline-number headline info)))
+                    (let* ((tl-hl (org-element-get-top-level headline))
+                           (page-headline-number
+                            (org-export-get-headline-number
+                             ;; (org-element-get-top-level headline)
+                             headline
+                             info)))
+                      (if (eq tl-hl tl-headline)
+                          (setf curr-number-ref page-headline-number))
                       (cl-list*
                        (org-html--format-toc-headline
                         headline
                         info)
-                       (org-html--hidden-in-toc? (org-element-get-top-level headline-number)
-                                                 (plist-get info :tl-headline-number))
+                       (org-html--hidden-in-toc? page-headline-number
+                                                 curr-number-ref)
                        (org-export-get-relative-level headline info))))
 		  (org-export-collect-local-headlines info depth scope))))
     (when toc-entries
