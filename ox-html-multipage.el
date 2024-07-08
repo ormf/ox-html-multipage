@@ -17,6 +17,10 @@
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;; etags Kommando: sudo find . -name "*.el.gz" -print -or -name "*.el" -print | xargs sudo etags --append
+
+
+
 ;;; `org-export-collect-footnote-definitions' is changed to obtain the
 ;;; reference number the same way as in the footnote reference itself
 ;;; rather than counting from zero as implemented before.
@@ -638,7 +642,7 @@ or DIR."
             (org-export--collect-tree-info ;;; here everything happens!!!
              backend subtreep visible-only body-only ext-plist))
            (headline-numbering (plist-get info :headline-numbering))
-           (pt-hl-lookup (reverse-assoc-list headline-numbering))
+;;;           (pt-hl-lookup (reverse-assoc-list headline-numbering))
            (join-subheadlines-on-empty-body t)
            (max-toc-depth (or (plist-get info :with-toc) 0))
            (exported-headline-numbering
@@ -684,7 +688,7 @@ or DIR."
       (plist-put info :tl-hl-lookup tl-hl-lookup)
       (plist-put info :section-nav-lookup section-nav-lookup)
       (plist-put info :tl-url-lookup tl-url-lookup)
-      (plist-put info :pt-hl-lookup pt-hl-lookup)
+;;;      (plist-put info :pt-hl-lookup pt-hl-lookup)
       (plist-put info :stripped-section-headline-numbering
                  stripped-section-headline-numbering)
       (plist-put info :section-trees section-trees)
@@ -999,11 +1003,13 @@ holding contextual information."
                   (org-html--container headline info)))))))
 
 (defun org-html--full-reference (destination info)
-  (if (plist-get info :multipage)
-      (concat
+  "retrieve the full reference in case of multipage."
+  (concat
+   (if (plist-get info :multipage)
        (org-html--get-multipage-page-url destination info)
-       (format "#%s" (org-export-get-reference destination info)))
-    (org-html--reference destination info)))
+     "")
+   "#"
+   (org-export-get-reference destination info)))
 
 (defun org-html-link (link desc info)
   "Transcode a LINK object from Org to HTML.
@@ -1841,3 +1847,22 @@ CONTENTS is nil.  INFO is a plist holding contextual
 information."
   (let ((ref (org-html--reference target info nil t)))
     (org-html--anchor ref nil nil info)))
+
+
+(defun org-html--wrap-image (contents info &optional caption label)
+  "Wrap CONTENTS string within an appropriate environment for images.
+INFO is a plist used as a communication channel.  When optional
+arguments CAPTION and LABEL are given, use them for caption and
+\"id\" attribute."
+  (let ((html5-fancy (org-html--html5-fancy-p info)))
+    (format (if html5-fancy "\n<figure%s>\n%s%s\n</figure>"
+	      "\n<div%s class=\"figure\">\n%s%s\n</div>")
+	    ;; ID.
+	    (if (org-string-nw-p label) (format " id=\"%s\"" label) "")
+	    ;; Contents.
+	    (if html5-fancy contents (format "<p>%s</p>" contents))
+	    ;; Caption.
+	    (if (not (org-string-nw-p caption)) ""
+	      (format (if html5-fancy "\n<figcaption>%s</figcaption>"
+			"\n<p>%s</p>")
+		      caption)))))

@@ -246,38 +246,38 @@ backend and return the string."
       (plist-get info :filter-final-output)
       output info))))
 
-(defun org-export-as
-    (backend &optional subtreep visible-only body-only ext-plist)
-  "Transcode current Org buffer into BACKEND code.
-
-BACKEND is either an export back-end, as returned by, e.g.,
-`org-export-create-backend', or a symbol referring to
-a registered back-end.
-
-If narrowing is active in the current buffer, only transcode its
-narrowed part.
-
-If a region is active, transcode that region.
-
-When optional argument SUBTREEP is non-nil, transcode the
-sub-tree at point, extracting information from the headline
-properties first.
-
-When optional argument VISIBLE-ONLY is non-nil, don't export
-contents of hidden elements.
-
-When optional argument BODY-ONLY is non-nil, only return body
-code, without surrounding template.
-
-Optional argument EXT-PLIST, when provided, is a property list
-with external parameters overriding Org default settings, but
-still inferior to file-local settings.
-
-Return code as a string."
-
-  (let ((info (org-export--collect-tree-info
-               backend subtreep visible-only body-only)))
-    (org-export--transcode-headline (plist-get info :parse-tree) info)))
+;; (defun org-export-as
+;;     (backend &optional subtreep visible-only body-only ext-plist)
+;;   "Transcode current Org buffer into BACKEND code.
+;; 
+;; BACKEND is either an export back-end, as returned by, e.g.,
+;; `org-export-create-backend', or a symbol referring to
+;; a registered back-end.
+;; 
+;; If narrowing is active in the current buffer, only transcode its
+;; narrowed part.
+;; 
+;; If a region is active, transcode that region.
+;; 
+;; When optional argument SUBTREEP is non-nil, transcode the
+;; sub-tree at point, extracting information from the headline
+;; properties first.
+;; 
+;; When optional argument VISIBLE-ONLY is non-nil, don't export
+;; contents of hidden elements.
+;; 
+;; When optional argument BODY-ONLY is non-nil, only return body
+;; code, without surrounding template.
+;; 
+;; Optional argument EXT-PLIST, when provided, is a property list
+;; with external parameters overriding Org default settings, but
+;; still inferior to file-local settings.
+;; 
+;; Return code as a string."
+;; 
+;;   (let ((info (org-export--collect-tree-info
+;;                backend subtreep visible-only body-only)))
+;;     (org-export--transcode-headline (plist-get info :parse-tree) info)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -460,21 +460,22 @@ its navigation."
                  :up-headline up
                  :up-title (org-element-title up))))
 
-(defun org-html--generate-tl-url-names (stripped-section-headline-numbering info)
+(defun org-html--generate-tl-url-names (info)
   "generate an assoc list between all headlines appearing in the toc
 and the url names of the page they're on."
-  (let ((extension (plist-get info :html-extension)))
+  (let ((extension (plist-get info :html-extension))
+        (stripped-section-headline-numbering (plist-get info :stripped-section-headline-numbering)))
     (mapcar
      (lambda (entry)
-       (let* ((tl-elem (org-element-get-top-level (car entry)))
+       (let* ((tl-elem (org-element-get-top-level entry))
               (title (org-element-title tl-elem)))
          (cons
-          (car entry)
+          entry
           (string-prepend-chapters
            (string-to-backend-filename title extension)
            (cdr (assoc tl-elem stripped-section-headline-numbering))
            org-export-headline-levels))))
-    stripped-section-headline-numbering)))
+     (plist-get info :section-trees))))
 
 (defun org-export--collect-multipage-tree-properties (info)
   "add :section-url-lookup entry to info. INFO is used as communication
@@ -522,7 +523,7 @@ but referenced."
   (let* (headline
          (props (copy-sequence (nth 1 org-node)))
          (new (list (car org-node) props)))
-    (unless keep-parent (cl-remf props :parent))
+    (unless keep-parent (setf (org-element-property :parent new) nil))
     (apply 'org-element-adopt-elements new (org-element-contents org-node))))
 
 (defun org-remove-subheadlines (org-node &optional join-empty-bodies keep-parent)
@@ -688,7 +689,7 @@ or DIR."
         ;; original headlines for link lookup of stripped headlines.
         
       (setq global-info info)
-      (let* ((tl-url-lookup (org-html--generate-tl-url-names stripped-section-headline-numbering info))
+      (let* ((tl-url-lookup (org-html--generate-tl-url-names info))
              (section-nav-lookup (org-export--make-section-nav-lookup stripped-section-headline-numbering tl-hl-lookup))
              (section-filenames (mapcar
                                  (lambda (hl) (alist-get hl tl-url-lookup))
@@ -949,7 +950,7 @@ holding contextual information."
            (full-text (funcall (plist-get info :html-format-headline-function)
                                todo todo-type priority text tags info))
            (contents (or contents ""))
-	   (id (org-html--reference headline info nil t))
+	   (id (org-html--reference headline info))
 	   (formatted-text
 	    (if (plist-get info :html-self-link-headlines)
 		(format "<a href=\"#%s\">%s</a>" id full-text)
@@ -964,8 +965,7 @@ holding contextual information."
 	     (org-html-format-list-item
 	      contents (if numberedp 'ordered 'unordered)
 	      nil info nil
-	      (concat (org-html--anchor id nil nil info) formatted-text))
-             "\n"
+	      (concat (org-html--anchor id nil nil info) formatted-text)) "\n"
 	     (and (org-export-last-sibling-p headline info)
 		  (format "</%s>\n" html-type))))
 	;; Standard headline.  Export it as a section.
@@ -997,7 +997,79 @@ holding contextual information."
                   ;; empty one to get the correct <div
                   ;; class="outline-...> which is needed by
                   ;; `org-info.js'.
-                  (if (eq (org-element-type first-content) 'section) contents
+                  (if (org-element-type-p first-content 'section) contents
+                    (concat (org-html-section first-content "" info) contents))
+                  (org-html--container headline info)))))))
+
+(defun org-html-headline (headline contents info)
+  "Transcode a HEADLINE element from Org to HTML.
+CONTENTS holds the contents of the headline.  INFO is a plist
+holding contextual information."
+  (unless (org-element-property :footnote-section-p headline)
+    (let* ((numberedp (org-export-numbered-headline-p headline info))
+           (numbers (org-export-get-headline-number headline info))
+           (level (+ (org-export-get-relative-level headline info)
+                     (1- (plist-get info :html-toplevel-hlevel))))
+           (todo (and (plist-get info :with-todo-keywords)
+                      (let ((todo (org-element-property :todo-keyword headline)))
+                        (and todo (org-export-data todo info)))))
+           (todo-type (and todo (org-element-property :todo-type headline)))
+           (priority (and (plist-get info :with-priority)
+                          (org-element-property :priority headline)))
+           (text (org-export-data (org-element-property :title headline) info))
+           (tags (and (plist-get info :with-tags)
+                      (org-export-get-tags headline info)))
+           (full-text (funcall (plist-get info :html-format-headline-function)
+                               todo todo-type priority text tags info))
+           (contents (or contents ""))
+	   (id (org-html--reference headline info nil (plist-get info :multipage)))
+	   (formatted-text
+	    (if (plist-get info :html-self-link-headlines)
+		(format "<a href=\"#%s\">%s</a>" id full-text)
+	      full-text)))
+      (if (org-export-low-level-p headline info)
+          ;; This is a deep sub-tree: export it as a list item.
+          (let* ((html-type (if numberedp "ol" "ul")))
+	    (concat
+	     (and (org-export-first-sibling-p headline info)
+		  (apply #'format "<%s class=\"org-%s\">\n"
+			 (make-list 2 html-type)))
+	     (org-html-format-list-item
+	      contents (if numberedp 'ordered 'unordered)
+	      nil info nil
+	      (concat (org-html--anchor id nil nil info) formatted-text)) "\n"
+	     (and (org-export-last-sibling-p headline info)
+		  (format "</%s>\n" html-type))))
+	;; Standard headline.  Export it as a section.
+        (let ((extra-class
+	       (org-element-property :HTML_CONTAINER_CLASS headline))
+	      (headline-class
+	       (org-element-property :HTML_HEADLINE_CLASS headline))
+              (first-content (car (org-element-contents headline))))
+          (format "<%s id=\"%s\" class=\"%s\">%s%s</%s>\n"
+                  (org-html--container headline info)
+                  (format "outline-container-%s" id)
+                  (concat (format "outline-%d" level)
+                          (and extra-class " ")
+                          extra-class)
+                  (format "\n<h%d id=\"%s\"%s>%s</h%d>\n"
+                          level
+                          id
+			  (if (not headline-class) ""
+			    (format " class=\"%s\"" headline-class))
+                          (concat
+                           (and numberedp
+                                (format
+                                 "<span class=\"section-number-%d\">%s</span> "
+                                 level
+                                 (concat (mapconcat #'number-to-string numbers ".") ".")))
+                           formatted-text)
+                          level)
+                  ;; When there is no section, pretend there is an
+                  ;; empty one to get the correct <div
+                  ;; class="outline-...> which is needed by
+                  ;; `org-info.js'.
+                  (if (org-element-type-p first-content 'section) contents
                     (concat (org-html-section first-content "" info) contents))
                   (org-html--container headline info)))))))
 
@@ -1563,7 +1635,7 @@ of listings as a string, or nil if it is empty."
 					 (org-html--translate "Listing %d:" info))))
 		(mapconcat
 		 (lambda (entry)
-		   (let ((label (org-html--reference entry info t t))
+		   (let ((label (org-html--reference entry info t (plist-get info :multipage)))
 			 (title (org-trim
 				 (org-export-data
 				  (or (org-export-get-caption entry t)
@@ -1601,7 +1673,7 @@ of tables as a string, or nil if it is empty."
 					 (org-html--translate "Table %d:" info))))
 		(mapconcat
 		 (lambda (entry)
-		   (let ((label (org-html--reference entry info t t))
+		   (let ((label (org-html--reference entry info t (plist-get info :multipage)))
 			 (title (org-trim
 				 (org-export-data
 				  (or (org-export-get-caption entry t)
@@ -1629,7 +1701,7 @@ information."
     (if (plist-get attributes :textarea)
 	(org-html--textarea-block example-block)
       (format "<pre class=\"example\"%s>\n%s</pre>"
-	      (let* ((reference (org-html--reference example-block info nil t))
+	      (let* ((reference (org-html--reference example-block info nil (plist-get info :multipage)))
 		     (a (org-html--make-attribute-string
 			 (if (or (not reference) (plist-member attributes :id))
 			     attributes
@@ -1646,7 +1718,7 @@ contextual information."
 		(org-element-property :value inline-src-block)
 		lang))
 	 (label
-	  (let ((lbl (org-html--reference inline-src-block info t t)))
+	  (let ((lbl (org-html--reference inline-src-block info t (plist-get info :multipage))))
 	    (if (not lbl) "" (format " id=\"%s\"" lbl)))))
     (format "<code class=\"src src-%s\"%s>%s</code>" lang label code)))
 
@@ -1686,7 +1758,7 @@ the plist used as a communication channel."
 				  info nil #'org-html-standalone-image-p))
 			 " </span>"
 			 raw))))
-	    (label (org-html--reference paragraph info nil t)))
+	    (label (org-html--reference paragraph info nil (plist-get info :multipage))))
 	(org-html--wrap-image contents info caption label)))
      ;; Regular paragraph.
      (t (format "<p%s%s>\n%s</p>"
@@ -1699,7 +1771,7 @@ the plist used as a communication channel."
 CONTENTS holds the contents of the block.  INFO is a plist
 holding contextual information."
   (format "<blockquote%s>\n%s</blockquote>"
-	  (let* ((reference (org-html--reference quote-block info t t))
+	  (let* ((reference (org-html--reference quote-block info t (plist-get info :multipage)))
 		 (attributes (org-export-read-attribute :attr_html quote-block))
 		 (a (org-html--make-attribute-string
 		     (if (or (not reference) (plist-member attributes :id))
@@ -1722,7 +1794,7 @@ holding contextual information."
                                     (if class (concat class " " block-type)
                                       block-type)))))
     (let* ((contents (or contents ""))
-	   (reference (org-html--reference special-block info nil t))
+	   (reference (org-html--reference special-block info nil (plist-get info :multipage)))
 	   (a (org-html--make-attribute-string
 	       (if (or (not reference) (plist-member attributes :id))
 		   attributes
@@ -1740,7 +1812,7 @@ contextual information."
       (org-html--textarea-block src-block)
     (let* ((lang (org-element-property :language src-block))
 	   (code (org-html-format-code src-block info))
-	   (label (let ((lbl (org-html--reference src-block info t t)))
+	   (label (let ((lbl (org-html--reference src-block info t (plist-get info :multipage))))
 		    (if lbl (format " id=\"%s\"" lbl) "")))
 	   (klipsify  (and  (plist-get info :html-klipsify-src)
                             (member lang '("javascript" "js"
@@ -1786,7 +1858,7 @@ contextual information."
 	   (attributes
 	    (org-html--make-attribute-string
 	     (org-combine-plists
-	      (list :id (org-html--reference table info t t))
+	      (list :id (org-html--reference table info t (plist-get info :multipage)))
 	      (and (not (org-html-html5-p info))
 		   (plist-get info :html-table-attributes))
 	      (org-export-read-attribute :attr_html table))))
@@ -1836,7 +1908,7 @@ contextual information."
 		(org-element-property :value inline-src-block)
 		lang))
 	 (label
-	  (let ((lbl (org-html--reference inline-src-block info t t)))
+	  (let ((lbl (org-html--reference inline-src-block info t (plist-get info :multipage))))
 	    (if (not lbl) "" (format " id=\"%s\"" lbl)))))
     (format "<code class=\"src src-%s\"%s>%s</code>" lang label code)))
 
@@ -1844,7 +1916,7 @@ contextual information."
   "Transcode a TARGET object from Org to HTML.
 CONTENTS is nil.  INFO is a plist holding contextual
 information."
-  (let ((ref (org-html--reference target info nil t)))
+  (let ((ref (org-html--reference target info nil (plist-get info :multipage))))
     (org-html--anchor ref nil nil info)))
 
 
