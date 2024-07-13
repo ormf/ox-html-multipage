@@ -417,7 +417,7 @@ its navigation."
   (org-element-property :raw-value element))
 
 (defun org-export--make-section-nav-lookup (stripped-section-headline-numbering hl-lookup)
-  "Return an assoc-list containing entries for all headline-numbers
+  "Return an assoc-list containing entries for the headlines of all sections
 with a plist containing title and headlines for the section and
 its navigation."
   (cl-loop
@@ -581,16 +581,8 @@ headline-number."
                   nil filename nil :silent)
     nil))
 
-;; TODO: org-html--get-multipage-page-url is html specific, should be
-;; generic.
-;; org-export--make-section-url-lookup
-
 (defun reverse-assoc-list (assoc-list)
   (mapcar (lambda (entry) (cons (cdr entry) (car entry))) assoc-list))
-
-(defun org-html--get-new-section-url-names (info)
-  nil
-  )
 
 (defun org-export-multipage-to-dir
     (backend dir &optional async subtreep visible-only body-only ext-plist
@@ -687,8 +679,6 @@ or DIR."
 
         ;; maintain a assoc list between the stripped headlines and the
         ;; original headlines for link lookup of stripped headlines.
-        
-      (setq global-info info)
       (let* ((tl-url-lookup (org-html--generate-tl-url-names info))
              (section-nav-lookup (org-export--make-section-nav-lookup stripped-section-headline-numbering tl-hl-lookup))
              (section-filenames (mapcar
@@ -797,17 +787,17 @@ Return output directory's name."
     (assoc
      (org-export-get-headline-number
       element
-      global-info)
-     (plist-get global-info :tl-hl-lookup)))
-   (plist-get global-info :tl-url-lookup)))
+      info)
+     (plist-get info :tl-hl-lookup)))
+   (plist-get info :tl-url-lookup)))
 
 (defun org-html--headline-number-to-page-url (headline-number info)
   (alist-get
    (cdr
     (assoc
      headline-number
-     (plist-get global-info :tl-hl-lookup)))
-   (plist-get global-info :tl-url-lookup)))
+     (plist-get info :tl-hl-lookup)))
+   (plist-get info :tl-url-lookup)))
 
 ;;; rewritten functions from ox-html:
 

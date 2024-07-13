@@ -3111,8 +3111,11 @@ backend and return the string."
 		     (if (not (functionp inner-template)) body
                          (funcall inner-template body info headline))
 		     info))
-	 (template (cdr (assq 'template
-			      (plist-get info :translate-alist))))
+	 (template (if (plist-get info :multipage)
+                       (cdr (assq 'multipage-template
+                                  (plist-get info :translate-alist)))
+                     (cdr (assq 'template
+                                  (plist-get info :translate-alist)))))
          (output
           (if (or (not (functionp template)) body-only) full-body
 	    (funcall template full-body info))))
