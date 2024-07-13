@@ -219,7 +219,7 @@ Return info for further processing."
 	   ;; a template.
            info))))))
 
-(defun org-export--transcode-headline (headline info)
+(defun org-export--transcode-headline (headline info &optional body-only)
   "transcode the headline tree into a string according to the
 backend and return the string."
   (let* ((body (org-element-normalize-string
@@ -1283,34 +1283,6 @@ INFO is a plist holding contextual information.  See
      (t
       (format "<i>%s</i>" desc)))))
 
-(defun org-html--toc-text (toc-entries)
-  "Return innards of a table of contents, as a string.
-TOC-ENTRIES is an alist where key is an entry title, as a string,
-and value is its relative level, as an integer."
-  (setq debug toc-entries)
-  (let* ((prev-level (1- (cddar toc-entries)))
-	 (start-level prev-level))
-    (concat
-     (mapconcat
-      (lambda (entry)
-	(let ((headline (car entry))
-              (hidden (cadr entry))
-	      (level (cddr entry)))
-	  (concat
-	   (format
-            (let* ((cnt (- level prev-level))
-                   (times (if (> cnt 0) (1- cnt) (- cnt))))
-              (setq prev-level level)
-              (concat
-               (org-html--make-string
-                times (cond ((> cnt 0) "\n<ul>\n<li>")
-                            ((< cnt 0) "</li>\n</ul>\n")))
-               (if (> cnt 0) "\n<ul>\n<li%s>" "</li>\n<li%s>")))
-            (if hidden " class=\"toc-hidden\"" ""))
-	   headline)))
-      toc-entries "")
-     (org-html--make-string (- prev-level start-level) "</li>\n</ul>\n"))))
-
 (defun org-html--hidden-in-toc? (headline-number tl-headline-number)
   (and
    (> (length headline-number) 1)
@@ -1323,6 +1295,106 @@ and value is its relative level, as an integer."
                              (butlast headline-number))))
       (t (not (equal (butlast headline-number)
                      (butlast (butlast tl-headline-number)))))))))
+
+(defun org-export-collect-local-headlines (info depth scope)
+  "collect all toc headlines converted to local tl-headlines."
+  (let ((tl-headline-lookup (plist-get info :tl-hl-lookup))
+        (headline-numbering (plist-get info :headline-numbering)))
+    (mapcar
+     (lambda (pt-headline)
+       (cdr
+        (assoc (cdr (assoc pt-headline headline-numbering))
+               tl-headline-lookup)))
+     (org-export-collect-headlines info depth scope))))
+
+;;; from orginal org-mode
+
+(defun org-html--format-toc-headline (headline info)
+  "Return an appropriate table of contents entry for HEADLINE.
+INFO is a plist used as a communication channel."
+  (let* ((headline-number (org-export-get-headline-number headline info))
+	 (todo (and (plist-get info :with-todo-keywords)
+		    (let ((todo (org-element-property :todo-keyword headline)))
+		      (and todo (org-export-data todo info)))))
+	 (todo-type (and todo (org-element-property :todo-type headline)))
+	 (priority (and (plist-get info :with-priority)
+			(org-element-property :priority headline)))
+	 (text (org-export-data-with-backend
+		(org-export-get-alt-title headline info)
+		(org-export-toc-entry-backend 'html)
+		info))
+	 (tags (and (eq (plist-get info :with-tags) t)
+		    (org-export-get-tags headline info))))
+    (format "<a href=\"#%s\">%s</a>"
+	    ;; Label.
+	    (org-html--reference headline info)
+	    ;; Body.
+	    (concat
+	     (and (not (org-export-low-level-p headline info))
+		  (org-export-numbered-headline-p headline info)
+		  (concat (mapconcat #'number-to-string headline-number ".")
+			  ". "))
+	     (apply (plist-get info :html-format-headline-function)
+		    todo todo-type priority text tags :section-number nil)))))
+
+(defun org-html--toc-text (toc-entries)
+  "Return innards of a table of contents, as a string.
+TOC-ENTRIES is an alist where key is an entry title, as a string,
+and value is its relative level, as an integer."
+  (let* ((prev-level (1- (cdar toc-entries)))
+	 (start-level prev-level))
+    (concat
+     (mapconcat
+      (lambda (entry)
+	(let ((headline (car entry))
+	      (level (cdr entry)))
+	  (concat
+	   (let* ((cnt (- level prev-level))
+		  (times (if (> cnt 0) (1- cnt) (- cnt))))
+	     (setq prev-level level)
+	     (concat
+	      (org-html--make-string
+	       times (cond ((> cnt 0) "\n<ul>\n<li>")
+			   ((< cnt 0) "</li>\n</ul>\n")))
+	      (if (> cnt 0) "\n<ul>\n<li>" "</li>\n<li>")))
+	   headline)))
+      toc-entries "")
+     (org-html--make-string (- prev-level start-level) "</li>\n</ul>\n"))))
+
+(defun org-html-toc (depth info &optional scope)
+  "Build a table of contents.
+DEPTH is an integer specifying the depth of the table.  INFO is
+a plist used as a communication channel.  Optional argument SCOPE
+is an element defining the scope of the table.  Return the table
+of contents as a string, or nil if it is empty."
+  (let ((toc-entries
+	 (mapcar (lambda (headline)
+		   (cons (org-html--format-toc-headline headline info)
+			 (org-export-get-relative-level headline info)))
+		 (org-export-collect-headlines info depth scope))))
+    (when toc-entries
+      (let* ((toc-id-counter (plist-get info :org-html--toc-counter))
+             (toc (concat (format "<div id=\"text-table-of-contents%s\" role=\"doc-toc\">"
+                                  (if toc-id-counter (format "-%d" toc-id-counter) ""))
+			  (org-html--toc-text toc-entries)
+			  "</div>\n")))
+        (plist-put info :org-html--toc-counter (1+ (or toc-id-counter 0)))
+	(if scope toc
+	  (let ((outer-tag (if (org-html--html5-fancy-p info)
+			       "nav"
+			     "div")))
+	    (concat (format "<%s id=\"table-of-contents%s\" role=\"doc-toc\">\n"
+                            outer-tag
+                            (if toc-id-counter (format "-%d" toc-id-counter) ""))
+		    (let ((top-level (plist-get info :html-toplevel-hlevel)))
+		      (format "<h%d>%s</h%d>\n"
+			      top-level
+			      (org-html--translate "Table of Contents" info)
+			      top-level))
+		    toc
+		    (format "</%s>\n" outer-tag))))))))
+
+;;; multipage code:
 
 (defun org-html--format-toc-headline (headline info)
   "Return an appropriate table of contents entry for HEADLINE.
@@ -1365,16 +1437,33 @@ INFO is a plist used as a communication channel."
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
 
-(defun org-export-collect-local-headlines (info depth scope)
-  "collect all toc headlines converted to local tl-headlines."
-  (let ((tl-headline-lookup (plist-get info :tl-hl-lookup))
-        (headline-numbering (plist-get info :headline-numbering)))
-    (mapcar
-     (lambda (pt-headline)
-       (cdr
-        (assoc (cdr (assoc pt-headline headline-numbering))
-               tl-headline-lookup)))
-     (org-export-collect-headlines info depth scope))))
+(defun org-html--toc-text (toc-entries)
+  "Return innards of a table of contents, as a string.
+TOC-ENTRIES is an alist where key is an entry title, as a string,
+and value is its relative level, as an integer."
+  (setq debug toc-entries)
+  (let* ((prev-level (1- (cddar toc-entries)))
+	 (start-level prev-level))
+    (concat
+     (mapconcat
+      (lambda (entry)
+	(let ((headline (car entry))
+              (hidden (cadr entry))
+	      (level (cddr entry)))
+	  (concat
+	   (format
+            (let* ((cnt (- level prev-level))
+                   (times (if (> cnt 0) (1- cnt) (- cnt))))
+              (setq prev-level level)
+              (concat
+               (org-html--make-string
+                times (cond ((> cnt 0) "\n<ul>\n<li>")
+                            ((< cnt 0) "</li>\n</ul>\n")))
+               (if (> cnt 0) "\n<ul>\n<li%s>" "</li>\n<li%s>")))
+            (if hidden " class=\"toc-hidden\"" ""))
+	   headline)))
+      toc-entries "")
+     (org-html--make-string (- prev-level start-level) "</li>\n</ul>\n"))))
 
 (defun org-html-toc (depth info &optional scope)
   "Build a table of contents.
