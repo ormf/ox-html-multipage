@@ -1898,49 +1898,44 @@ produce code that uses these same face definitions."
 Replaces invalid characters with \"_\"."
   (replace-regexp-in-string "[^a-zA-Z0-9_]" "_" kwd nil t))
 
-(defun org-html-footnote-section (info)
+(defun org-html-footnote-section (info &optional data)
   "Format the footnote section.
-INFO is a plist used as a communication channel."
-  (pcase (org-export-collect-footnote-definitions info)
+INFO is a plist used as a communication channel. DATA is the
+toplevel headline of the current page in multipage export,
+otherwise the :parse-tree property of INFO will be used."
+  (pcase (org-export-collect-footnote-definitions info data)
     (`nil nil)
     (definitions
-     (format
-      (plist-get info :html-footnotes-section)
-      (org-html--translate "Footnotes" info)
       (format
-       "\n%s\n"
-       (mapconcat
-	(lambda (definition)
-	  (pcase definition
-	    (`(,n ,label ,def)
-             ;; Do not assign number labels as they appear in Org mode
-             ;; - the footnotes are re-numbered by
-             ;; `org-export-get-footnote-number'.  If the label is not
-             ;; a number, keep it.
-             (when (and (stringp label)
-                        (equal label (number-to-string (string-to-number label))))
-               (setq label nil))
-	     ;; `org-export-collect-footnote-definitions' can return
-	     ;; two kinds of footnote definitions: inline and blocks.
-	     ;; Since this should not make any difference in the HTML
-	     ;; output, we wrap the inline definitions within
-	     ;; a "footpara" class paragraph.
-	     (let ((inline? (not (org-element-map def org-element-all-elements
-				 #'identity nil t)))
-		   (anchor (org-html--anchor
-                            (format "fn.%s" (or label n))
-			    n
-			    (format " class=\"footnum\" href=\"#fnr.%s\" role=\"doc-backlink\"" (or label n))
-			    info))
-		   (contents (org-trim (org-export-data def info))))
-	       (format "<div class=\"footdef\">%s %s</div>\n"
-		       (format (plist-get info :html-footnote-format) anchor)
-		       (format "<div class=\"footpara\" role=\"doc-footnote\">%s</div>"
-			       (if (not inline?) contents
-				 (format "<p class=\"footpara\">%s</p>"
-					 contents))))))))
-	definitions
-	"\n"))))))
+       (plist-get info :html-footnotes-section)
+       (org-html--translate "Footnotes" info)
+       (format
+	"\n%s\n"
+	(mapconcat
+	 (lambda (definition)
+	   (pcase definition
+	     (`(,n ,_ ,def)
+	      ;; `org-export-collect-footnote-definitions' can return
+	      ;; two kinds of footnote definitions: inline and blocks.
+	      ;; Since this should not make any difference in the HTML
+	      ;; output, we wrap the inline definitions within
+	      ;; a "footpara" class paragraph.
+	      (let ((inline? (not (org-element-map def org-element-all-elements
+				    #'identity nil t)))
+		    (anchor (org-html--anchor
+			     (format "fn.%d" n)
+			     n
+			     (format " class=\"footnum\" href=\"#fnr.%d\" role=\"doc-backlink\"" n)
+			     info))
+		    (contents (org-trim (org-export-data def info))))
+		(format "<div class=\"footdef\">%s %s</div>\n"
+			(format (plist-get info :html-footnote-format) anchor)
+			(format "<div class=\"footpara\" role=\"doc-footnote\">%s</div>"
+				(if (not inline?) contents
+				  (format "<p class=\"footpara\">%s</p>"
+					  contents))))))))
+	 definitions
+	 "\n"))))))
 
 
 ;;; Template
@@ -4121,7 +4116,8 @@ INFO is the communication channel.
 ;;;  (message "writing '%s'" file)
   (message "Yeah!")
   (let ((dir (plist-get info :export-directory))
-        (async (plist-get info :async)))
+        (async (plist-get info :async))
+        (post-process (plist-get info :post-process)))
     (declare (indent 2))
     (if (not (file-writable-p dir)) (error "Output dir not writable")
       (let* ((encoding (or org-export-coding-system buffer-file-coding-system))
@@ -4592,7 +4588,7 @@ headline-number."
     nil))
 
 (defun org-html-export-to-multipage-html
-    (&optional async subtreep visible-only body-only ext-plist)
+    (&optional async subtreep visible-only body-only ext-plist post-process)
   "Export current buffer to a HTML file.
 
 If narrowing is active in the current buffer, only export its
@@ -4627,7 +4623,12 @@ Return output directory's name."
 			 "html")))
 	 (dir (or "html" (org-export-output-file-name "" subtreep)))
 	 (org-export-coding-system org-html-coding-system))
-    (org-export-as 'html subtreep visible-only body-only (cl-list* :async async :multipage t :export-directory dir ext-plist))))
+    (org-export-as 'html subtreep visible-only body-only (cl-list*
+                                                          :async async
+                                                          :post-process post-process
+                                                          :multipage t
+                                                          :export-directory dir
+                                                          ext-plist))))
 
 (defun org-html--headline-number-to-page-url (headline-number info)
   "Return the url of the page HEADLINE-NUMBER is on."

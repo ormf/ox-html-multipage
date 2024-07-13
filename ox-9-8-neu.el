@@ -3089,7 +3089,9 @@ Return code as a string."
                        backend info subtreep visible-only ext-plist))
            (setq global-info info)
            (if (plist-get info :multipage)
-               (funcall (car (plist-get info :process-multipage)) info body-only)
+               (funcall (car (plist-get info :process-multipage))
+                        info
+                        body-only)
              ;; Eventually transcode TREE.  Wrap the resulting string into
              ;; a template.
              (org-export-transcode-headline (plist-get info :parse-tree) info body-only))))))))
