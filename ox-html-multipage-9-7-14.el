@@ -416,49 +416,57 @@ its navigation."
 (defun org-element-title (element)
   (org-element-property :raw-value element))
 
-(defun org-export--make-section-nav-lookup (stripped-section-headline-numbering hl-lookup)
+(defun org-export--make-section-nav-lookup (info)
   "Return an assoc-list containing entries for the headlines of all sections
 with a plist containing title and headlines for the section and
 its navigation."
-  (cl-loop
-   with accum = '()
-   for prev-entry = nil then curr-entry
-   for curr-entry on stripped-section-headline-numbering
-   for next-entry = (cdr curr-entry)
-   for curr = (caar curr-entry)
-   ;; find prev entry with a different toplevel-hl than curr:
-   for prev = (let ((tmp-hl (caar prev-entry))
-                    (curr-tl (org-element-get-top-level curr))
-                    (past-hl accum))
-                (while (and tmp-hl
-                            (eq (org-element-get-top-level tmp-hl)
-                                curr-tl))
-                  (setf tmp-hl (car past-hl))
-                  (setf past-hl (cdr past-hl)))
-                tmp-hl)
-   ;; find next entry with a different toplevel-hl than curr:
-   for next = (let ((tmp-hl (caar next-entry))
-                    (curr-tl (org-element-get-top-level curr))
-                    (next-hl-entry (cdr next-entry)))
-                (while (and tmp-hl
-                            (eq (org-element-get-top-level tmp-hl)
-                                curr-tl))
-                  (setf tmp-hl (caar next-hl-entry))
-                  (setf next-hl-entry (cdr next-hl-entry)))
-                tmp-hl)
-   for headline = (caar curr-entry)
-   for headline-number = (cdar curr-entry)
-   for up = (cdr (assoc (butlast headline-number) hl-lookup))
-   do (push curr accum)
-   collect (list curr
-                 :section-headline curr
-                 :section-title (org-element-title curr)
-                 :next-headline next
-                 :next-title (org-element-title next)
-                 :prev-headline prev
-                 :prev-title (org-element-title prev)
-                 :up-headline up
-                 :up-title (org-element-title up))))
+  (let ((stripped-section-headline-numbering (plist-get info :stripped-section-headline-numbering))
+        (hl-lookup (plist-get info :hl-lookup)))
+    (cl-loop
+     with accum = '()
+     for prev-entry = nil then curr-entry
+     for curr-entry on stripped-section-headline-numbering
+     for next-entry = (cdr curr-entry)
+     for curr = (caar curr-entry)
+     ;; find prev entry with a different toplevel-hl than curr:
+     for prev = (let ((tmp-hl (caar prev-entry))
+                      (curr-tl (org-element-get-top-level curr))
+                      (past-hl accum))
+                  (while (and tmp-hl
+                              (eq (org-element-get-top-level tmp-hl)
+                                  curr-tl))
+                    (setf tmp-hl (car past-hl))
+                    (setf past-hl (cdr past-hl)))
+                  tmp-hl)
+     ;; find next entry with a different toplevel-hl than curr:
+     for next = (let ((tmp-hl (caar next-entry))
+                      (curr-tl (org-element-get-top-level curr))
+                      (next-hl-entry (cdr next-entry)))
+                  (while (and tmp-hl
+                              (eq (org-element-get-top-level tmp-hl)
+                                  curr-tl))
+                    (setf tmp-hl (caar next-hl-entry))
+                    (setf next-hl-entry (cdr next-hl-entry)))
+                  tmp-hl)
+     for headline = (caar curr-entry)
+     for headline-number = (cdar curr-entry)
+     for up = (cdr (assoc (butlast headline-number) hl-lookup))
+     do (push curr accum)
+     collect (list curr
+                   :section-headline curr
+                   :section-title (org-element-title curr)
+                   :next-headline next
+                   :next-title (org-element-title next)
+                   :prev-headline prev
+                   :prev-title (org-element-title prev)
+                   :up-headline up
+                   :up-title (org-element-title up)
+                   :section-url (org-html--full-reference curr info)
+                   :next-url (org-html--full-reference next info)
+                   :prev-url (org-html--full-reference prev info)
+                   :up-url (org-html--full-reference up info)
+
+                   ))))
 
 (defun org-html--generate-tl-url-names (info)
   "generate an assoc list between all headlines appearing in the toc
