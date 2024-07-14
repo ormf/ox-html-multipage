@@ -1723,14 +1723,13 @@ attribute with a nil value will be omitted from the result."
 
 (defun org-html--get-multipage-page-url (element info)
   "Return the url of the page containing ELEMENT."
-  (cdr
-   (assoc
-    (org-export-get-multipage-tl-headline element info)
-    (plist-get global-info :tl-url-lookup))))
+  (alist-get
+   (org-export-get-multipage-tl-headline element info)
+   (plist-get global-info :tl-url-lookup)))
 
 (defun org-html--full-reference (destination info)
   "Return an appropriate reference for DATUM. Like
-org-html--reference, but generateing an extended cross-page
+org-html--reference, but generating an extended cross-page
 reference for multipage.
 
 DATUM is an element or a `target' type object.  INFO is the
@@ -3465,7 +3464,10 @@ INFO is a plist holding contextual information.  See
      ;; appropriate referencing command.
      ((member type '("custom-id" "fuzzy" "id"))
       (let ((destination (if (string= type "fuzzy")
-			     (org-export-resolve-fuzzy-link link info)
+			     (if (plist-get info :multipage)
+                                 (alist-get (org-export-resolve-fuzzy-link link info)
+                                            (plist-get info :stripped-hl-to-parse-tree-hl))
+                               (org-export-resolve-fuzzy-link link info))
 			   (org-export-resolve-id-link link info))))
 	(pcase (org-element-type destination)
 	  ;; ID link points to an external file.
@@ -3519,8 +3521,8 @@ INFO is a plist holding contextual information.  See
 	       ;; environment.  Use "ref" or "eqref" macro, depending on user
                ;; preference to refer to those in the document.
                (format (plist-get info :html-equation-reference-format)
-                       (org-html--reference destination info))
-             (let* ((ref (org-html--reference destination info))
+                       (org-html--full-reference destination info))
+             (let* ((ref (org-html--full-reference destination info))
                     (org-html-standalone-image-predicate
                      #'org-html--has-caption-p)
                     (counter-predicate
@@ -3543,7 +3545,7 @@ INFO is a plist holding contextual information.  See
 			   ((numberp numbered-ref) (number-to-string number))
                            ((stringp numbered-ref) numbered-ref)
 			   (t (mapconcat #'number-to-string number ".")))))
-               (format "<a href=\"#%s\"%s>%s</a>" ref attributes desc)))))))
+               (format "<a href=\"%s\"%s>%s</a>" ref attributes desc)))))))
      ;; Coderef: replace link with the reference name or the
      ;; equivalent line number.
      ((string= type "coderef")
@@ -4382,8 +4384,8 @@ INFO is the communication channel.
                                  (mapcar 'car stripped-section-headline-numbering)
                                  (mapcar 'car exported-headline-numbering))
                       (cl-mapcar 'cons
-                                 (mapcar 'car stripped-section-headline-numbering)
-                                 (mapcar 'car exported-headline-numbering))))
+                                 (mapcar 'car exported-headline-numbering)
+                                 (mapcar 'car stripped-section-headline-numbering))))
           (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))     
           (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
