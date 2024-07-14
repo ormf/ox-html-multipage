@@ -2540,23 +2540,21 @@ of contents as a string, or nil if it is empty."
          (tl-headline (plist-get info :tl-headline))
          (curr-number-ref tl-headline-number)
          (toc-entries
-	  (mapcar (lambda (headline)
-                    (let* ((tl-hl (org-element-get-top-level headline))
-                           (page-headline-number
-                            (org-export-get-multipage-headline-number
-                             ;; (org-element-get-top-level headline)
-                             headline
-                             info)))
+	  (mapcar (lambda (entry)
+                    (let* ((props (cdr entry))
+                           (tl-hl (plist-get props :tl-hl))
+                           (page-headline-number (plist-get props :page-hl-number)))
                       (if (eq tl-hl tl-headline)
                           (setf curr-number-ref page-headline-number))
                       (cl-list*
-                       (org-html--format-multipage-toc-headline
-                        headline
-                        info)
+                       (org-html--format-mp-toc-headline
+                        (plist-get props :href)
+                        (plist-get props :toc-body)
+                        (equal (plist-get props :tl-hl) tl-headline))
                        (org-html--hidden-in-toc? page-headline-number
                                                  curr-number-ref)
-                       (org-export-get-relative-level headline info))))
-		  (org-export-collect-local-headlines info depth scope))))
+                       (plist-get props :relative-level))))
+                  (plist-get info :multipage-toc-lookup))))
     (when toc-entries
       (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
 			 (org-html--toc-text toc-entries)
@@ -2651,13 +2649,12 @@ INFO is a plist used as a communication channel."
 		    (org-export-get-tags headline info))))
     (format "<a %s>%s</a>"
             ;; Target
-            (if (plist-get info :multipage)
-                (format "href=\"%s\"%s"
-                        (org-html--full-reference headline info)
-                        (if (equal (org-element-get-top-level headline) tl-headline)
-                            "class=\"toc-entry toc-active\""
-                          "class=\"toc-entry\""))
-              (format "#%s" (org-html--reference headline info)))
+            (format "href=\"%s\"%s"
+                    (org-html--full-reference headline info)
+                    (if (equal (org-element-get-top-level headline) tl-headline)
+                        "class=\"toc-entry toc-active\""
+                      "class=\"toc-entry\""))
+            
 	    ;; Body.
 	    (concat
 	     (and (not (org-export-low-level-p headline info))
@@ -2667,6 +2664,48 @@ INFO is a plist used as a communication channel."
                    "&nbsp;&nbsp;"))
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
+
+(defun org-html--get-toc-body (headline info)
+  "Return the body of the toc entry of HEADLINE. INFO is a plist
+used as a communication channel."
+  (let* ((headline-number (org-export-get-multipage-headline-number headline info))
+	 (todo (and (plist-get info :with-todo-keywords)
+		    (let ((todo (org-element-property :todo-keyword headline)))
+		      (and todo (org-export-data todo info)))))
+	 (todo-type (and todo (org-element-property :todo-type headline)))
+	 (priority (and (plist-get info :with-priority)
+			(org-element-property :priority headline)))
+	 (text (org-export-data-with-backend
+		(org-export-get-alt-title headline info)
+		(org-export-toc-entry-backend 'html)
+		info))
+	 (tags (and (eq (plist-get info :with-tags) t)
+		    (org-export-get-tags headline info))))
+    ;; Body.
+    (concat
+     (and (not (org-export-low-level-p headline info))
+          (org-export-numbered-headline-p headline info)
+          (concat
+           (mapconcat #'number-to-string headline-number ".")
+           "&nbsp;&nbsp;"))
+     (apply (plist-get info :html-format-headline-function)
+            todo todo-type priority text tags :section-number nil))))
+
+(defun org-html--format-mp-toc-headline (href body active)
+  "Return a table of contents entry."
+  (format "<a %s>%s</a>"
+          ;; Target
+          (format "href=\"%s\"%s"
+                  href 
+                  (if active
+                      "class=\"toc-entry toc-active\""
+                    "class=\"toc-entry\""))
+          
+          ;; Body.
+          body))
+
+;;; (org-html--format-mp-toc-headline "my-url" "Seite 1" t)
+
 
 (defun org-html-list-of-listings (info)
   "Build a list of listings.
@@ -3573,6 +3612,7 @@ INFO is a plist holding contextual information.  See
       (format "<i>%s</i>" desc)))))
 
 
+
 (defun org-html-link (link desc info)
   "Transcode a LINK object from Org to HTML.
 DESC is the description part of the link, or the empty string.
@@ -4372,7 +4412,7 @@ INFO is the communication channel.
         (setq global-info info) ;;; for debugging purposes, remove later
         ;; tl-url-lookup only contains the names of the joined pages
         ;; to export.
-        (plist-put info :tl-url-lookup (org-html--generate-tl-url-names info))
+        (plist-put info :tl-url-lookup (org-html--generate-tl-url-lookup info))
         (plist-put info :section-nav-lookup (org-export--make-section-nav-lookup info))
         (let ((section-filenames (mapcar
                     (lambda (hl) (alist-get hl (plist-get info :tl-url-lookup)))
@@ -4386,7 +4426,8 @@ INFO is the communication channel.
                       (cl-mapcar 'cons
                                  (mapcar 'car exported-headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
-          (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))     
+          (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
+          (plist-put info :multipage-toc-lookup (org-html--make-toc-lookup info))
           (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
            for file in section-filenames
@@ -4604,7 +4645,7 @@ its navigation."
           (plist-put (cdr lookup) :section-up-url (plist-get up :section-url)))))
     url-lookup))
 
-(defun org-html--generate-tl-url-names (info)
+(defun org-html--generate-tl-url-lookup (info)
   "generate an assoc list between all headlines appearing in the toc
 and the url names of the page they're on."
   (let ((extension (plist-get info :html-extension))
@@ -4642,38 +4683,6 @@ section and its navigation."
                         (next (cadr curr-entry)))
                     (if curr
                         (cons (list (car curr)
-                                    :prev-title (or (nth 1 prev) "")
-                                    :curr-title (nth 1 curr)
-                                    :next-title (or (nth 1 next) "")
-                                    :up-title (or (nth 3 curr) "")
-                                    :prev-url (or (nth 2 prev) "")
-                                    :curr-url (nth 2 curr)
-                                    :next-url (or (nth 2 next) "")
-                                    :up-url (or (nth 4 curr) ""))
-                              (inner (cdr prev-entry) (cdr curr-entry)))))))
-      (inner (cons nil nav) nav))))
-
-(defun org-export--make-section-nav-lookup (info)
-  "Return an assoc-list containing entries for the headlines of all
-exported pages with a plist containing titles and urls for the
-section and its navigation."
-  (let* ((stripped-section-headline-numbering (plist-get info :stripped-section-headline-numbering))
-         (hl-lookup (plist-get info :tl-hl-lookup))
-         ;;; first collect navigation-info once for each page only
-         (nav (mapcar (lambda (hl)
-                        (let* ((hl-number (alist-get hl stripped-section-headline-numbering))
-                               (up (cdr (assoc (butlast hl-number) hl-lookup))))
-                          (list hl (org-element-title hl) (org-html--full-reference hl info)
-                                (org-element-title up) (if up (org-html--full-reference up info) ""))))
-                      (plist-get global-info :section-trees))))
-    ;;; collect the info for prev, curr and next navigation for each
-    ;;; page by cdr-ing over nav.
-    (cl-labels ((inner (prev-entry curr-entry)
-                  (let ((prev (car prev-entry))
-                        (curr (car curr-entry))
-                        (next (cadr curr-entry)))
-                    (if curr
-                        (cons (list (car curr)
                                     :prev-title (nth 1 prev)
                                     :curr-title (nth 1 curr)
                                     :next-title (nth 1 next)
@@ -4685,20 +4694,23 @@ section and its navigation."
                               (inner (cdr prev-entry) (cdr curr-entry)))))))
       (inner (cons nil nav) nav))))
 
-(defun org-export--collect-multipage-tree-properties (info)
-  "add :section-url-lookup entry to info. INFO is used as communication
-channel."
-  (org-combine-plists
-   info
-   (list :section-url-lookup
-         (org-export--make-section-url-lookup
-          (cl-remove-if
-           (lambda (hl-num)
-             (> (length hl-num)
-                (or (plist-get info :with-toc) 0)))
-           (plist-get info :headline-numbering)
-           :key 'cdr)
-          (plist-get info :file-extension)))))
+;;; headline level
+
+;;;; (org-export-collect-headlines info depth scope)
+
+(defun org-html--make-toc-lookup (info)
+  "Return an assoc-list containing info for the headlines of all toc entries."
+  (mapcar
+   (lambda (hl)
+     (let* ((tl-hl (org-element-get-top-level hl)))
+       (list hl
+             :href (org-html--full-reference hl info)
+             :tl-hl tl-hl
+             :relative-level (org-export-get-relative-level hl info)
+             :toc-body (org-html--get-toc-body hl info)
+             :toc-hl-number (alist-get hl (plist-get info :headline-numbering))
+             :page-hl-number (org-export-get-multipage-headline-number hl info))))
+   (org-export-collect-local-headlines global-info 3 nil)))
 
 (defun org-export-get-multipage-tl-headline (element info)
   "return the headline of the page containing
