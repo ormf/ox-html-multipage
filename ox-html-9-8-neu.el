@@ -4422,9 +4422,9 @@ INFO is the communication channel.
                      (append
                       (cl-mapcar 'cons
                                  (mapcar 'car stripped-section-headline-numbering)
-                                 (mapcar 'car exported-headline-numbering))
+                                 (mapcar 'car headline-numbering))
                       (cl-mapcar 'cons
-                                 (mapcar 'car exported-headline-numbering)
+                                 (mapcar 'car headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
           (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
           (plist-put info :multipage-toc-lookup (org-html--make-toc-lookup info))
