@@ -162,6 +162,8 @@
     (:html-mathjax-options nil nil org-html-mathjax-options)
     (:html-mathjax-template nil nil org-html-mathjax-template)
     (:html-metadata-timestamp-format nil nil org-html-metadata-timestamp-format)
+    (:html-multipage-head-include-default-style
+     nil "html-multipage-style" org-html-multipage-head-include-default-style)
     (:html-postamble-format nil nil org-html-postamble-format)
     (:html-preamble-format nil nil org-html-preamble-format)
     (:html-prefer-user-labels nil nil org-html-prefer-user-labels)
@@ -464,6 +466,237 @@ this style.  If you don't want to include this default style,
 customize `org-html-head-include-default-style'."
   :group 'org-export-html
   :package-version '(Org . "9.5")
+  :type 'string)
+
+(defcustom org-html-multipage-style-default
+  "<style type=\"text/css\">
+#content { margin: auto;
+           display: grid;
+           position: absolute;
+           width: 90%;
+           grid-template-rows: 0em 7em 1fr;
+           grid-template-columns: 27em 1fr;
+           grid-template-areas: \"toc nav\"
+                                \"toc menu\"
+                                \"toc content\";
+}
+
+header {
+    grid-area: menu;
+}
+
+#table-of-contents {
+    grid-area: toc;
+    height: 100%;
+}
+
+#page-main-body {
+    grid-area: content;
+    height: 100%;
+    display: flex;
+    overflow: auto;
+    width: 60hw;
+}
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #e6e6e6;
+    border-radius: 3px;
+    background-color: #f2f2f2;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: auto;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    top: -8px;
+    right: 12px;
+    padding: 3px;
+    color: #555;
+    background-color: #f2f2f299;
+  }
+  pre.src:hover:before { display: inline; margin-top: 14px;}
+  /* Languages per Org manual */
+  pre.src-asymptote:before { content: 'Asymptote'; }
+  pre.src-awk:before { content: 'Awk'; }
+  pre.src-authinfo::before { content: 'Authinfo'; }
+  pre.src-C:before { content: 'C'; }
+  /* pre.src-C++ doesn't work in CSS */
+  pre.src-clojure:before { content: 'Clojure'; }
+  pre.src-css:before { content: 'CSS'; }
+  pre.src-D:before { content: 'D'; }
+  pre.src-ditaa:before { content: 'ditaa'; }
+  pre.src-dot:before { content: 'Graphviz'; }
+  pre.src-calc:before { content: 'Emacs Calc'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-fortran:before { content: 'Fortran'; }
+  pre.src-gnuplot:before { content: 'gnuplot'; }
+  pre.src-haskell:before { content: 'Haskell'; }
+  pre.src-hledger:before { content: 'hledger'; }
+  pre.src-java:before { content: 'Java'; }
+  pre.src-js:before { content: 'Javascript'; }
+  pre.src-latex:before { content: 'LaTeX'; }
+  pre.src-ledger:before { content: 'Ledger'; }
+  pre.src-lisp:before { content: 'Lisp'; }
+  pre.src-lilypond:before { content: 'Lilypond'; }
+  pre.src-lua:before { content: 'Lua'; }
+  pre.src-matlab:before { content: 'MATLAB'; }
+  pre.src-mscgen:before { content: 'Mscgen'; }
+  pre.src-ocaml:before { content: 'Objective Caml'; }
+  pre.src-octave:before { content: 'Octave'; }
+  pre.src-org:before { content: 'Org mode'; }
+  pre.src-oz:before { content: 'OZ'; }
+  pre.src-plantuml:before { content: 'Plantuml'; }
+  pre.src-processing:before { content: 'Processing.js'; }
+  pre.src-python:before { content: 'Python'; }
+  pre.src-R:before { content: 'R'; }
+  pre.src-ruby:before { content: 'Ruby'; }
+  pre.src-sass:before { content: 'Sass'; }
+  pre.src-scheme:before { content: 'Scheme'; }
+  pre.src-screen:before { content: 'Gnu Screen'; }
+  pre.src-sed:before { content: 'Sed'; }
+  pre.src-sh:before { content: 'shell'; }
+  pre.src-sql:before { content: 'SQL'; }
+  pre.src-sqlite:before { content: 'SQLite'; }
+  /* additional languages in org.el's org-babel-load-languages alist */
+  pre.src-forth:before { content: 'Forth'; }
+  pre.src-io:before { content: 'IO'; }
+  pre.src-J:before { content: 'J'; }
+  pre.src-makefile:before { content: 'Makefile'; }
+  pre.src-maxima:before { content: 'Maxima'; }
+  pre.src-perl:before { content: 'Perl'; }
+  pre.src-picolisp:before { content: 'Pico Lisp'; }
+  pre.src-scala:before { content: 'Scala'; }
+  pre.src-shell:before { content: 'Shell Script'; }
+  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+  /* additional language identifiers per \"defun org-babel-execute\"
+       in ob-*.el */
+  pre.src-cpp:before  { content: 'C++'; }
+  pre.src-abc:before  { content: 'ABC'; }
+  pre.src-coq:before  { content: 'Coq'; }
+  pre.src-groovy:before  { content: 'Groovy'; }
+  /* additional language identifiers from org-babel-shell-names in
+     ob-shell.el: ob-shell is the only babel language using a lambda to put
+     the execution function name together. */
+  pre.src-bash:before  { content: 'bash'; }
+  pre.src-csh:before  { content: 'csh'; }
+  pre.src-ash:before  { content: 'ash'; }
+  pre.src-dash:before  { content: 'dash'; }
+  pre.src-ksh:before  { content: 'ksh'; }
+  pre.src-mksh:before  { content: 'mksh'; }
+  pre.src-posh:before  { content: 'posh'; }
+  /* Additional Emacs modes also supported by the LaTeX listings package */
+  pre.src-ada:before { content: 'Ada'; }
+  pre.src-asm:before { content: 'Assembler'; }
+  pre.src-caml:before { content: 'Caml'; }
+  pre.src-delphi:before { content: 'Delphi'; }
+  pre.src-html:before { content: 'HTML'; }
+  pre.src-idl:before { content: 'IDL'; }
+  pre.src-mercury:before { content: 'Mercury'; }
+  pre.src-metapost:before { content: 'MetaPost'; }
+  pre.src-modula-2:before { content: 'Modula-2'; }
+  pre.src-pascal:before { content: 'Pascal'; }
+  pre.src-ps:before { content: 'PostScript'; }
+  pre.src-prolog:before { content: 'Prolog'; }
+  pre.src-simula:before { content: 'Simula'; }
+  pre.src-tcl:before { content: 'tcl'; }
+  pre.src-tex:before { content: 'TeX'; }
+  pre.src-plain-tex:before { content: 'Plain TeX'; }
+  pre.src-verilog:before { content: 'Verilog'; }
+  pre.src-vhdl:before { content: 'VHDL'; }
+  pre.src-xml:before { content: 'XML'; }
+  pre.src-nxml:before { content: 'XML'; }
+  /* add a generic configuration mode; LaTeX export needs an additional
+     (add-to-list 'org-latex-listings-langs '(conf \" \")) in .emacs */
+  pre.src-conf:before { content: 'Configuration File'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara { display: inline; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  a.nav-left::before {
+    content: 'prev';
+  }
+  a.nav-up::before {
+    content: 'up';
+  }
+  a.nav-right::before {
+    content: 'next';
+  }
+  a.nav-top::before {
+    content: 'top';
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  .org-svg { }
+</style>"
+  "The default style specification for exported HTML files.
+You can use `org-html-head' and `org-html-head-extra' to add to
+this style.  If you don't want to include this default style,
+customize `org-html-head-include-default-style'."
+  :group 'org-export-html
+  :package-version '(Org . "9.8")
   :type 'string)
 
 
@@ -1526,8 +1759,19 @@ style information."
   :version "24.4"
   :package-version '(Org . "8.0")
   :type 'boolean)
+
+(defcustom org-html-multipage-head-include-default-style t
+  "Non-nil means include the default style in exported HTML files.
+The actual style is defined in `org-html-style-default' and
+should not be modified.  Use `org-html-head' to use your own
+style information."
+  :group 'org-export-html
+  :version "29.4"
+  :package-version '(Org . "9.8")
+  :type 'boolean)
 ;;;###autoload
 (put 'org-html-head-include-default-style 'safe-local-variable 'booleanp)
+(put 'org-html-multipage-head-include-default-style 'safe-local-variable 'booleanp)
 
 (defcustom org-html-head ""
   "Org-wide head definitions for exported HTML files.
@@ -1727,7 +1971,7 @@ attribute with a nil value will be omitted from the result."
    (org-export-get-multipage-tl-headline element info)
    (plist-get global-info :tl-url-lookup)))
 
-(defun org-html--full-reference (destination info)
+(defun org-html--full-reference (destination info &optional page-only)
   "Return an appropriate reference for DATUM. Like
 org-html--reference, but generating an extended cross-page
 reference for multipage.
@@ -1735,15 +1979,12 @@ reference for multipage.
 DATUM is an element or a `target' type object.  INFO is the
 current export state, as a plist.
 
-When NAMED-ONLY is non-nil and DATUM has no NAME keyword, return
-nil.  This doesn't apply to headlines, inline tasks, radio
-targets and targets."
-  (concat
-   (if (plist-get info :multipage)
-       (org-html--get-multipage-page-url destination info)
-     "")
-   "#"
-   (org-export-get-reference destination info)))
+When PAGE-ONLY is non-nil just return the page reference."
+  (if (plist-get info :multipage)
+      (concat (org-html--get-multipage-page-url destination info)
+              (if page-only ""
+                (format "#%s" (org-export-get-reference destination info))))
+    (format "#%s" (org-export-get-reference destination info))))
 
 (defun org-html--reference (datum info &optional named-only)
   "Return an appropriate reference for DATUM.
@@ -2041,6 +2282,9 @@ applied to arguments ARGS, and the result is passed to
 INFO is a plist used as a communication channel."
   (org-element-normalize-string
    (concat
+    (if (plist-get info :multipage)
+        (when (plist-get info :html-multipage-head-include-default-style)
+          (org-element-normalize-string org-html-multipage-style-default)))
     (when (plist-get info :html-head-include-default-style)
       (org-element-normalize-string org-html-style-default))
     (org-html-normalize-string-or-function (plist-get info :html-head) info)
@@ -3612,196 +3856,6 @@ INFO is a plist holding contextual information.  See
       (format "<i>%s</i>" desc)))))
 
 
-
-(defun org-html-link (link desc info)
-  "Transcode a LINK object from Org to HTML.
-DESC is the description part of the link, or the empty string.
-INFO is a plist holding contextual information.  See
-`org-export-data'."
-  (let* ((html-ext (plist-get info :html-extension))
-	 (dot (when (> (length html-ext) 0) "."))
-	 (link-org-files-as-html-maybe
-	  (lambda (raw-path info)
-	    ;; Treat links to `file.org' as links to `file.html', if
-	    ;; needed.  See `org-html-link-org-files-as-html'.
-            (save-match-data
-	      (cond
-	       ((and (plist-get info :html-link-org-files-as-html)
-                     (let ((case-fold-search t))
-                       (string-match "\\(.+\\)\\.org\\(?:\\.gpg\\)?$" raw-path)))
-	        (concat (match-string 1 raw-path) dot html-ext))
-	       (t raw-path)))))
-	 (type (org-element-property :type link))
-	 (raw-path (org-element-property :path link))
-	 ;; Ensure DESC really exists, or set it to nil.
-	 (desc (org-string-nw-p desc))
-	 (path
-	  (cond
-	   ((string= "file" type)
-	    ;; During publishing, turn absolute file names belonging
-	    ;; to base directory into relative file names.  Otherwise,
-	    ;; append "file" protocol to absolute file name.
-	    (setq raw-path
-		  (org-export-file-uri
-		   (org-publish-file-relative-name raw-path info)))
-	    ;; Possibly append `:html-link-home' to relative file
-	    ;; name.
-	    (let ((home (and (plist-get info :html-link-home)
-			     (org-trim (plist-get info :html-link-home)))))
-	      (when (and home
-			 (plist-get info :html-link-use-abs-url)
-			 (not (file-name-absolute-p raw-path)))
-		(setq raw-path (concat (file-name-as-directory home) raw-path))))
-	    ;; Maybe turn ".org" into ".html".
-	    (setq raw-path (funcall link-org-files-as-html-maybe raw-path info))
-	    ;; Add search option, if any.  A search option can be
-	    ;; relative to a custom-id, a headline title, a name or
-	    ;; a target.
-	    (let ((option (org-element-property :search-option link)))
-	      (if (not option) raw-path
-		(let ((path (org-element-property :path link)))
-		  (concat raw-path
-			  "#"
-			  (org-publish-resolve-external-link option path t))))))
-	   (t (url-encode-url (concat type ":" raw-path)))))
-	 (attributes-plist
-	  (org-combine-plists
-	   ;; Extract attributes from parent's paragraph.  HACK: Only
-	   ;; do this for the first link in parent (inner image link
-	   ;; for inline images).  This is needed as long as
-	   ;; attributes cannot be set on a per link basis.
-	   (let* ((parent (org-element-parent-element link))
-		  (link (let ((container (org-element-parent link)))
-			  (if (and (org-element-type-p container 'link)
-				   (org-html-inline-image-p link info))
-			      container
-			    link))))
-	     (and (eq link (org-element-map parent 'link #'identity info t))
-		  (org-export-read-attribute :attr_html parent)))
-	   ;; Also add attributes from link itself.  Currently, those
-	   ;; need to be added programmatically before `org-html-link'
-	   ;; is invoked, for example, by backends building upon HTML
-	   ;; export.
-	   (org-export-read-attribute :attr_html link)))
-	 (attributes
-	  (let ((attr (org-html--make-attribute-string attributes-plist)))
-	    (if (org-string-nw-p attr) (concat " " attr) ""))))
-    (cond
-     ;; Link type is handled by a special function.
-     ((org-export-custom-protocol-maybe link desc 'html info))
-     ;; Image file.
-     ((and (plist-get info :html-inline-images)
-	   (org-export-inline-image-p
-	    link (plist-get info :html-inline-image-rules)))
-      (org-html--format-image path attributes-plist info))
-     ;; Radio target: Transcode target's contents and use them as
-     ;; link's description.
-     ((string= type "radio")
-      (let ((destination (org-export-resolve-radio-link link info)))
-	(if (not destination) desc
-	  (format "<a href=\"#%s\"%s>%s</a>"
-		  (org-export-get-reference destination info)
-		  attributes
-		  desc))))
-     ;; Links pointing to a headline: Find destination and build
-     ;; appropriate referencing command.
-     ((member type '("custom-id" "fuzzy" "id"))
-      (let ((destination (if (string= type "fuzzy")
-			     (org-export-resolve-fuzzy-link link info)
-			   (org-export-resolve-id-link link info))))
-	(pcase (org-element-type destination)
-	  ;; ID link points to an external file.
-	  (`plain-text
-	   (let ((fragment (concat org-html--id-attr-prefix raw-path))
-		 ;; Treat links to ".org" files as ".html", if needed.
-		 (path (funcall link-org-files-as-html-maybe
-				destination info)))
-	     (format "<a href=\"%s#%s\"%s>%s</a>"
-		     path fragment attributes (or desc destination))))
-	  ;; Fuzzy link points nowhere.
-	  (`nil
-	   (format "<i>%s</i>"
-		   (or desc
-		       (org-export-data
-			(org-element-property :raw-link link) info))))
-	  ;; Link points to a headline.
-	  (`headline
-	   (let ((href (org-html--reference destination info))
-		 ;; What description to use?
-		 (desc
-		  ;; Case 1: Headline is numbered and LINK has no
-		  ;; description.  Display section number.
-		  (if (and (org-export-numbered-headline-p destination info)
-			   (not desc))
-		      (mapconcat #'number-to-string
-				 (org-export-get-headline-number
-				  destination info) ".")
-		    ;; Case 2: Either the headline is un-numbered or
-		    ;; LINK has a custom description.  Display LINK's
-		    ;; description or headline's title.
-		    (or desc
-			(org-export-data
-			 (org-element-property :title destination) info)))))
-	     (format "<a href=\"#%s\"%s>%s</a>" href attributes desc)))
-	  ;; Fuzzy link points to a target or an element.
-	  (_
-           (if (and destination
-                    (memq (plist-get info :with-latex) '(mathjax t))
-                    (org-element-type-p destination 'latex-environment)
-                    (eq 'math (org-latex--environment-type destination)))
-               ;; Caption and labels are introduced within LaTeX
-	       ;; environment.  Use "ref" or "eqref" macro, depending on user
-               ;; preference to refer to those in the document.
-               (format (plist-get info :html-equation-reference-format)
-                       (org-html--reference destination info))
-             (let* ((ref (org-html--reference destination info))
-                    (org-html-standalone-image-predicate
-                     #'org-html--has-caption-p)
-                    (counter-predicate
-                     (if (org-element-type-p destination 'latex-environment)
-                         #'org-html--math-environment-p
-                       #'org-html--has-caption-p))
-                    (number
-		     (cond
-		      (desc nil)
-		      ((org-html-standalone-image-p destination info)
-		       (org-export-get-ordinal
-			(org-element-map destination 'link #'identity info t)
-			info '(link) 'org-html-standalone-image-p))
-		      (t (org-export-get-ordinal
-			  destination info nil counter-predicate))))
-                    (desc
-		     (cond (desc)
-			   ((not number) "No description for this link")
-			   ((numberp number) (number-to-string number))
-			   (t (mapconcat #'number-to-string number ".")))))
-               (format "<a href=\"#%s\"%s>%s</a>" ref attributes desc)))))))
-     ;; Coderef: replace link with the reference name or the
-     ;; equivalent line number.
-     ((string= type "coderef")
-      (let ((fragment (concat "coderef-" (org-html-encode-plain-text raw-path))))
-	(format "<a href=\"#%s\" %s%s>%s</a>"
-		fragment
-		(format "class=\"coderef\" onmouseover=\"CodeHighlightOn(this, \
-'%s');\" onmouseout=\"CodeHighlightOff(this, '%s');\""
-			fragment fragment)
-		attributes
-		(format (org-export-get-coderef-format raw-path desc)
-			(org-export-resolve-coderef raw-path info)))))
-     ;; External link with a description part.
-     ((and path desc)
-      (format "<a href=\"%s\"%s>%s</a>"
-	      (org-html-encode-plain-text path)
-	      attributes
-	      desc))
-     ;; External link without a description part.
-     (path
-      (let ((path (org-html-encode-plain-text path)))
-	(format "<a href=\"%s\"%s>%s</a>" path attributes path)))
-     ;; No path, only description.  Try to do something useful.
-     (t
-      (format "<i>%s</i>" desc)))))
-
 ;;;; Node Property
 
 (defun org-html-node-property (node-property _contents _info)
@@ -4672,8 +4726,8 @@ section and its navigation."
          (nav (mapcar (lambda (hl)
                         (let* ((hl-number (alist-get hl stripped-section-headline-numbering))
                                (up (cdr (assoc (butlast hl-number) hl-lookup))))
-                          (list hl (org-element-title hl) (org-html--full-reference hl info)
-                                (org-element-title up) (if up (org-html--full-reference up info) ""))))
+                          (list hl (org-element-title hl) (org-html--full-reference hl info t)
+                                (org-element-title up) (if up (org-html--full-reference up info t) ""))))
                       (plist-get global-info :section-trees))))
     ;;; collect the info for prev, curr and next navigation for each
     ;;; page by cdr-ing over nav.
@@ -4704,7 +4758,7 @@ section and its navigation."
    (lambda (hl)
      (let* ((tl-hl (org-element-get-top-level hl)))
        (list hl
-             :href (org-html--full-reference hl info)
+             :href (org-html--full-reference hl info t)
              :tl-hl tl-hl
              :relative-level (org-export-get-relative-level hl info)
              :toc-body (org-html--get-toc-body hl info)
