@@ -777,7 +777,7 @@ Return output directory's name."
 (defun org-html--get-multipage-section-urls (element info)
   "Return the section-url plist of the page containing ELEMENT."
   (alist-get
-   (org-export--get-headline-number element info)
+   (org-export--get-tl-headline-number element info)
    (plist-get info :section-url-lookup)))
 
 (defun org-html--get-multipage-page-url (element info)
@@ -785,7 +785,7 @@ Return output directory's name."
   (alist-get
    (cdr
     (assoc
-     (org-export-get-headline-number
+     (org-export-get-tl-headline-number
       element
       info)
      (plist-get info :tl-hl-lookup)))
@@ -1389,7 +1389,7 @@ of contents as a string, or nil if it is empty."
 (defun org-html--format-toc-headline (headline info)
   "Return an appropriate table of contents entry for HEADLINE.
 INFO is a plist used as a communication channel."
-  (let* ((headline-number (org-export-get-headline-number headline info))
+  (let* ((headline-number (org-export-get-multipage-headline-number headline info))
          (tl-headline-number (plist-get info :tl-headline-number))
          (tl-headline (plist-get info :tl-headline))
 	 (todo (and (plist-get info :with-todo-keywords)

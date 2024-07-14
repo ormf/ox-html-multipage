@@ -4700,6 +4700,25 @@ added to info (done in org-export--collect-tree-properties)."
       (setf parent (org-element-property :parent elem)))
     elem))
 
+(defun org-export-get-multipage-headline-numbering (element info)
+  "return the headline of the section containing
+element. This requires that :headline-numbering has already been
+added to info (done in org-export--collect-tree-properties)."
+  (let* ((elem element)
+         (parent (org-element-property :parent elem))
+         (hl-numbering (assoc elem (plist-get info :stripped-section-headline-numbering))))
+    (while (not hl-numbering)
+      (setf elem parent)
+      (setf parent (org-element-property :parent elem))
+      (setf hl-numbering (assoc elem (plist-get info :stripped-section-headline-numbering))))
+    hl-numbering))
+
+(defun org-export-get-multipage-headline-number (element info)
+  "return the headline-number of the section containing
+element. This requires that :headline-numbering has already been
+added to info (done in org-export--collect-tree-properties)."
+  (cdr (org-export-get-multipage-headline-numbering element info)))
+
 (defun org-export-get-multipage-tl-headline-numbering (element info)
   "return the headline-numbering entry of the page containing
 element. This requires that :headline-numbering has already been
@@ -4707,7 +4726,7 @@ added to info (done in org-export--collect-tree-properties)."
   (assoc (org-export-get-multipage-tl-headline element info)
          (plist-get info :stripped-section-headline-numbering)))
 
-(defun org-export-get-multipage-headline-number (element info)
+(defun org-export-get-multipage-tl-headline-number (element info)
   "return the headline-number of the page containing
 element. This requires that :headline-numbering has already been
 added to info (done in org-export--collect-tree-properties)."
