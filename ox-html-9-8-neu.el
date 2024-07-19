@@ -2805,24 +2805,25 @@ plist used as a communication channel.  Optional argument SCOPE
 is an element defining the scope of the table.  Return the table
 of contents as a string, or nil if it is empty."
   (let* ((tl-headline-number (plist-get info :tl-headline-number))
-         (tl-headline (plist-get info :tl-headline))
+         (tl-headline (unless (plist-get info :full-toc) (plist-get info :tl-headline)))
          (curr-number-ref tl-headline-number)
          (toc-entries
-	  (mapcar (lambda (entry)
-                    (let* ((props (cdr entry))
-                           (tl-hl (plist-get props :tl-hl))
-                           (page-headline-number (plist-get props :page-hl-number)))
-                      (if (eq tl-hl tl-headline)
-                          (setf curr-number-ref page-headline-number))
-                      (cl-list*
-                       (org-html--format-mp-toc-headline
-                        (plist-get props :href)
-                        (plist-get props :toc-body)
-                        (equal (plist-get props :tl-hl) tl-headline))
-                       (org-html--hidden-in-toc? page-headline-number
-                                                 curr-number-ref)
-                       (plist-get props :relative-level))))
-                  (plist-get info :multipage-toc-lookup))))
+	  (cl-loop
+           for (entry . props) in (plist-get info :multipage-toc-lookup)
+           if (<= (length (plist-get props :toc-hl-number)) depth)
+           collect (let* ((tl-hl (plist-get props :tl-hl))
+                          (page-headline-number (plist-get props :page-hl-number)))
+                     (if (eq tl-hl tl-headline)
+                         (setf curr-number-ref page-headline-number))
+                     (cl-list*
+                      (org-html--format-mp-toc-headline
+                       (plist-get props :href)
+                       (plist-get props :toc-body)
+                       (equal (plist-get props :tl-hl) tl-headline))
+                      (unless (plist-get info :full-toc)
+                        (org-html--hidden-in-toc? page-headline-number
+                                                  curr-number-ref))
+                      (plist-get props :relative-level))))))
     (when toc-entries
       (let ((toc (concat "<div id=\"text-table-of-contents\" role=\"doc-toc\">"
 			 (org-html--toc-text toc-entries)
@@ -3420,7 +3421,9 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 		   (org-export-resolve-link
 		    (org-strip-quotes (match-string 1 value)) info))
 		  ((string-match-p "\\<local\\>" value) keyword)))) ;local
-	    (org-html-toc depth info scope)))
+	    (if (plist-get info :multipage)
+                (org-html-multipage-toc depth (cl-list* :full-toc t info) scope)
+              (org-html-toc depth info scope))))
 	 ((string= "listings" value) (org-html-list-of-listings info))
 	 ((string= "tables" value) (org-html-list-of-tables info))))))))
 
