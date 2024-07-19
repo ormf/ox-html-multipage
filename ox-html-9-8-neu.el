@@ -4433,7 +4433,7 @@ INFO is the communication channel.
                for section-entry in exported-headline-numbering
                collect (let* ((section-number (cdr section-entry)))
                          (if (< (length section-number) max-toc-depth)
-                             (org-remove-subheadlines
+                             (org-element-remove-subheadlines
                               (car section-entry)
                               join-subheadlines-on-empty-body)
                            (org-element-copy-element (car section-entry))))))
@@ -4480,7 +4480,7 @@ INFO is the communication channel.
                       (cl-mapcar 'cons
                                  (mapcar 'car headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
-          (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
+;;          (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
           (plist-put info :multipage-toc-lookup (org-html--make-toc-lookup info))
           (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
@@ -4821,6 +4821,16 @@ link name in tree."
       nil t)
     info)
    info))
+
+(defun org-element-get-top-level (element)
+  "Return the top-level element of ELEMENT by traversing the parse
+tree upwards until the parent of element is nil/doesn't exist."
+  (let ((elem element)
+        (parent (org-element-property :parent element)))
+    (while parent
+      (setq elem parent)
+      (setq parent (org-element-property :parent elem)))
+    elem))
 
 (defun org-element-copy-element (org-node &optional keep-parent)
   "copy ORG-NODE to a new org-node with elements not copied,

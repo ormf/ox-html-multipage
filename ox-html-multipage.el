@@ -707,9 +707,7 @@ or DIR."
                   (cl-mapcar 'cons
                              (mapcar 'car stripped-section-headline-numbering)
                              (mapcar 'car exported-headline-numbering))))
-
-      (plist-put info :section-filenames section-filenames)
-      (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
+;;      (plist-put info :new-section-url-names (org-html--get-new-section-url-names info))
       
       (setq global-info info) ;;; for debugging purposes, remove later
       (cl-loop
