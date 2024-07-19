@@ -2897,42 +2897,6 @@ INFO is a plist used as a communication channel."
 	     (apply (plist-get info :html-format-headline-function)
 		    todo todo-type priority text tags :section-number nil)))))
 
-(defun org-html--format-multipage-toc-headline (headline info)
-  "Return an appropriate table of contents entry for HEADLINE.
-INFO is a plist used as a communication channel."
-  (let* ((headline-number (org-export-get-multipage-headline-number headline info))
-         (tl-headline-number (plist-get info :tl-headline-number))
-         (tl-headline (plist-get info :tl-headline))
-	 (todo (and (plist-get info :with-todo-keywords)
-		    (let ((todo (org-element-property :todo-keyword headline)))
-		      (and todo (org-export-data todo info)))))
-	 (todo-type (and todo (org-element-property :todo-type headline)))
-	 (priority (and (plist-get info :with-priority)
-			(org-element-property :priority headline)))
-	 (text (org-export-data-with-backend
-		(org-export-get-alt-title headline info)
-		(org-export-toc-entry-backend 'html)
-		info))
-	 (tags (and (eq (plist-get info :with-tags) t)
-		    (org-export-get-tags headline info))))
-    (format "<a %s>%s</a>"
-            ;; Target
-            (format "href=\"%s\"%s"
-                    (org-html--full-reference headline info)
-                    (if (equal (org-element-get-top-level headline) tl-headline)
-                        "class=\"toc-entry toc-active\""
-                      "class=\"toc-entry\""))
-            
-	    ;; Body.
-	    (concat
-	     (and (not (org-export-low-level-p headline info))
-		  (org-export-numbered-headline-p headline info)
-		  (concat
-                   (mapconcat #'number-to-string headline-number ".")
-                   "&nbsp;&nbsp;"))
-	     (apply (plist-get info :html-format-headline-function)
-		    todo todo-type priority text tags :section-number nil)))))
-
 (defun org-html--get-toc-body (headline info)
   "Return the body of the toc entry of HEADLINE. INFO is a plist
 used as a communication channel."
@@ -2952,7 +2916,7 @@ used as a communication channel."
     ;; Body.
     (concat
      (and (not (org-export-low-level-p headline info))
-          (org-export-numbered-headline-p headline info)
+          (plist-get info :section-numbers)
           (concat
            (mapconcat #'number-to-string headline-number ".")
            "&nbsp;&nbsp;"))
@@ -4502,7 +4466,7 @@ INFO is the communication channel.
                                  (mapcar 'car headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
           (setq global-info info) ;;; for debugging purposes, remove later
-          (plist-put info :multipage-toc-lookup (org-html--make-toc-lookup info))
+          (plist-put info :multipage-toc-lookup (org-html--make-multipage-toc-lookup info))
           (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
            for file in section-filenames
@@ -4774,16 +4738,7 @@ section and its navigation."
                               (inner (cdr prev-entry) (cdr curr-entry)))))))
       (inner (cons nil nav) nav))))
 
-(defun org-html--make-front-matter (info)
-  (mapcar
-   (lambda (entry)
-     (case entry
-           ('title (list headline (:raw-value "Einführung in die Klangsynthese" :parent nil)))
-           ('toc (list headline (:raw-value "table of contents" :parent nil)))
-           ('title-toc (list headline (:raw-value "Einführung in die Klangsynthese" :parent nil)))))
-   (plist-get info :html-multipage-front-matter)))
-
-(defun org-html--make-toc-lookup (info)
+(defun org-html--make-multipage-toc-lookup (info)
   "Return an assoc-list containing info for the headlines of all toc entries."
   (mapcar
    (lambda (hl)
