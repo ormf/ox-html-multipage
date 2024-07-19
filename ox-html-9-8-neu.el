@@ -2819,7 +2819,8 @@ of contents as a string, or nil if it is empty."
                       (org-html--format-mp-toc-headline
                        (plist-get props :href)
                        (plist-get props :toc-body)
-                       (equal (plist-get props :tl-hl) tl-headline))
+                       (equal (plist-get props :tl-hl) tl-headline)
+                       (plist-get info :full-toc))
                       (unless (plist-get info :full-toc)
                         (org-html--hidden-in-toc? page-headline-number
                                                   curr-number-ref))
@@ -2924,20 +2925,24 @@ used as a communication channel."
      (apply (plist-get info :html-format-headline-function)
             todo todo-type priority text tags :section-number nil))))
 
-(defun org-html--format-mp-toc-headline (href body active)
+(defun org-html--format-mp-toc-headline (href body active full-toc)
   "Return a table of contents entry."
   (format "<a %s>%s</a>"
           ;; Target
           (format "href=\"%s\"%s"
-                  href 
-                  (if active
-                      "class=\"toc-entry toc-active\""
-                    "class=\"toc-entry\""))
+                  href
+                  (concat
+                   "class=\""
+                   (if full-toc "inline-toc-entry"
+                     "toc-entry")
+                   (if active
+                       " toc-active" "")
+                   "\""))
           
           ;; Body.
           body))
 
-;;; (org-html--format-mp-toc-headline "my-url" "Seite 1" t)
+;;; (org-html--format-mp-toc-headline "my-url" "Seite 1" t t)
 
 
 (defun org-html-list-of-listings (info)
