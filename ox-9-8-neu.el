@@ -1621,17 +1621,9 @@ an alist where associations are (VARIABLE-NAME VALUE)."
 
 ;;;; Tree Properties
 ;;
-;; Tree properties are information extracted from parse tree.  They
-;; are initialized at the beginning of the transcoding process by
-;; `org-export--collect-tree-properties'.
+;; Tree properties used for transcoding are collected before
+;; transcoding with `org-export--collect-tree-properties'.
 ;;
-;; Dedicated functions focus on computing the value of specific tree
-;; properties during initialization.  Thus, `org-export--prune-tree'
-;; lists elements and objects that should be skipped during export,
-;; `org-export--get-min-level' gets the minimal exportable level, used
-;; as a basis to compute relative level for headlines.  Eventually
-;; `org-export--collect-headline-numbering' builds an alist between
-;; headlines and their numbering.
 
 (defun org-export--collect-tree-properties (data info)
   "Extract tree properties from parse tree.
@@ -1674,6 +1666,14 @@ Return updated plist."
 		  (let* ((id (org-element-property :path l))
 			 (file (car (org-id-find id))))
 		    (and file (cons id (file-relative-name file))))))))))
+
+;; Dedicated functions focus on computing the value of specific tree
+;; properties during initialization.  Thus, `org-export--prune-tree'
+;; lists elements and objects that should be skipped during export,
+;; `org-export--get-min-level' gets the minimal exportable level, used
+;; as a basis to compute relative level for headlines.  Eventually
+;; `org-export--collect-headline-numbering' builds an alist between
+;; headlines and their numbering.
 
 (defun org-export--get-min-level (data options)
   "Return minimum exportable headline's level in DATA.
@@ -4222,7 +4222,8 @@ INFO is a plist holding contextual information."
   "Return a non-nil value if HEADLINE element should be numbered.
 INFO is a plist used as a communication channel."
   (unless (org-not-nil (org-export-get-node-property :UNNUMBERED headline t))
-    (let ((sec-num (plist-get info :section-numbers))
+    (let ((sec-num (or (plist-get info :section-numbers)
+                       (plist-get info :multipage)))
 	  (level (org-export-get-relative-level headline info)))
       (if (wholenump sec-num) (<= level sec-num) sec-num))))
 
