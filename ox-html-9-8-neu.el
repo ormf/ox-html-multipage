@@ -1802,20 +1802,21 @@ empty content.
   :type 'string)
 
 (defcustom org-html-multipage-nav-format
-  "<div id=\"org-div-nav-menu\">
- Next: <a accesskey=\"n\" href=\"%s\"> %s </a>,
- Previous: <a accesskey=\"p\" href=\"%s\"> %s </a>,
- Up: <a accesskey=\"u\" href=\"%s\"> %s </a>,
- Home: <a accesskey=\"h\" href=\"%s\"> %s </a>
-</div>"
-  "Snippet used to insert the NEXT, PREV, HOME and UP links in
-multipage output.
-This is a format string, the first %s will receive the NEXT link,
-the second the NEXT Title, etc."
+  '("<div id=\"org-div-nav-menu\">%s</div>"
+"Next: <a accesskey=\"n\" href=\"%s\"> %s </a>,"
+"Previous: <a accesskey=\"p\" href=\"%s\"> %s </a>,"
+"Up: <a accesskey=\"u\" href=\"%s\"> %s </a>,"
+"Home: <a accesskey=\"h\" href=\"%s\"> %s </a>")
+  "Snippets used to insert the NEXT, PREV, HOME and UP links in
+multipage output. The list contains format strings for the HTML
+div and the navigation elements. The %s in the HTML div will
+receive a concatenated string of the navigation elements. The
+first %s in the navigation elements will receive the link,
+the second the title"
   :group 'org-export-html
   :version "29.4"
   :package-version '(Org . "9.8")
-  :type 'string)
+  :type 'list)
 
 ;;;###autoload
 (put 'org-html-head-include-default-style 'safe-local-variable 'booleanp)
@@ -3771,10 +3772,7 @@ INFO is a plist holding contextual information.  See
      ;; appropriate referencing command.
      ((member type '("custom-id" "fuzzy" "id"))
       (let ((destination (if (string= type "fuzzy")
-			     (if (plist-get info :multipage)
-                                 (alist-get (org-export-resolve-fuzzy-link link info)
-                                            (plist-get info :stripped-hl-to-parse-tree-hl))
-                               (org-export-resolve-fuzzy-link link info))
+                             (org-export-resolve-fuzzy-link link info)
 			   (org-export-resolve-id-link link info))))
 	(pcase (org-element-type destination)
 	  ;; ID link points to an external file.
@@ -3793,7 +3791,13 @@ INFO is a plist holding contextual information.  See
 			(org-element-property :raw-link link) info))))
 	  ;; Link points to a headline.
 	  (`headline
-	   (let ((href (org-html--full-reference destination info))
+	   (let ((href
+                  (org-html--full-reference
+                   (if (plist-get info :multipage)
+                       (alist-get destination
+                                  (plist-get info :stripped-hl-to-parse-tree-hl))
+                     destination)
+                   info))
 		 ;; What description to use?
 		 (desc
 		  ;; Case 1: Headline is numbered and LINK has no
@@ -4757,7 +4761,7 @@ section and its navigation."
                                 (org-element-title hl)
                                 (org-html--full-reference hl info t)
                                 (org-element-title up)
-                                (if up (org-html--full-reference up info t) ""))))
+                                (and up (org-html--full-reference up info t)))))
                       (plist-get global-info :section-trees))))
     ;;; collect the info for prev, curr, next and up navigation for
     ;;; each page by cdr-ing over nav.
@@ -4767,14 +4771,14 @@ section and its navigation."
                         (next (cadr curr-entry)))
                     (if curr
                         (cons (list (car curr)
-                                    :prev-title (or (nth 1 prev) "")
-                                    :curr-title (or (nth 1 curr) "")
-                                    :next-title (or (nth 1 next) "")
-                                    :up-title (or (nth 3 curr) "")
-                                    :prev-url (or (nth 2 prev) "")
-                                    :curr-url (or (nth 2 curr) "")
-                                    :next-url (or (nth 2 next) "")
-                                    :up-url (or (nth 4 curr) ""))
+                                    :prev-title (nth 1 prev)
+                                    :curr-title (nth 1 curr)
+                                    :next-title (nth 1 next)
+                                    :up-title (nth 3 curr)
+                                    :prev-url (nth 2 prev)
+                                    :curr-url (nth 2 curr)
+                                    :next-url (nth 2 next)
+                                    :up-url (nth 4 curr))
                               (inner (cdr prev-entry) (cdr curr-entry)))))))
       (inner (cons nil nav) nav))))
 
@@ -5067,18 +5071,27 @@ holding export options."
    (let ((section-nav-lookup
           (alist-get
            (plist-get info :tl-headline)
-           (plist-get info :section-nav-lookup))))
-     (format (plist-get info :html-multipage-nav-format)
-             (plist-get section-nav-lookup :next-url)
-             (plist-get section-nav-lookup :next-title)
-             (plist-get section-nav-lookup :prev-url)
-             (plist-get section-nav-lookup :prev-title)
-             (plist-get section-nav-lookup :up-url)
-             (plist-get section-nav-lookup :up-title)
-             (plist-get info :html-top-url)
-             (plist-get info :html-top-title)
-             ))
-   ;; Preamble.
+           (plist-get info :section-nav-lookup)))
+         (nav-format (plist-get info :html-multipage-nav-format)))
+     (format (car nav-format)
+             (concat
+              (when (plist-get section-nav-lookup :next-url)
+                (format (cadr nav-format)
+                        (plist-get section-nav-lookup :next-url)
+                        (plist-get section-nav-lookup :next-title)))
+              (when (plist-get section-nav-lookup :prev-url)
+                (format (caddr nav-format)
+                        (plist-get section-nav-lookup :prev-url)
+                        (plist-get section-nav-lookup :prev-title)))
+              (when (plist-get section-nav-lookup :up-url)
+                    (format (cadddr nav-format)
+                            (plist-get section-nav-lookup :up-url)
+                            (plist-get section-nav-lookup :up-title)))
+              (when (plist-get info :html-top-url)
+                  (format (nth 4 nav-format)
+                          (plist-get info :html-top-url)
+                          (plist-get info :html-top-title))))))
+     ;; Preamble.
    (org-html--build-pre/postamble 'preamble info)
    ;; Document contents.
    (let ((div (assq 'content (plist-get info :html-divs))))
