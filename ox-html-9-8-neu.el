@@ -166,6 +166,9 @@
      nil "html-multipage-style" org-html-multipage-head-include-default-style)
     (:html-multipage-join-empty-bodies
      nil "html-multipage-join-empty-bodies" org-html-multipage-join-empty-bodies)
+    (:html-multipage-export-directory
+     nil "html-multipage-export-directory" org-html-multipage-export-directory)
+    (:html-multipage-nav-format nil nil org-html-multipage-nav-format)
     (:html-postamble-format nil nil org-html-postamble-format)
     (:html-preamble-format nil nil org-html-preamble-format)
     (:html-prefer-user-labels nil nil org-html-prefer-user-labels)
@@ -1792,10 +1795,33 @@ empty content.
   :package-version '(Org . "9.8")
   :type 'boolean)
 
+(defcustom org-html-multipage-export-directory "html"
+  "The default directory for exported HTML files."
+  :group 'org-export-html
+  :package-version '(Org . "9.8")
+  :type 'string)
+
+(defcustom org-html-multipage-nav-format
+  "<div id=\"org-div-nav-menu\">
+ Next: <a accesskey=\"n\" href=\"%s\"> %s </a>,
+ Previous: <a accesskey=\"p\" href=\"%s\"> %s </a>,
+ Up: <a accesskey=\"u\" href=\"%s\"> %s </a>,
+ Home: <a accesskey=\"h\" href=\"%s\"> %s </a>
+</div>"
+  "Snippet used to insert the NEXT, PREV, HOME and UP links in
+multipage output.
+This is a format string, the first %s will receive the NEXT link,
+the second the NEXT Title, etc."
+  :group 'org-export-html
+  :version "29.4"
+  :package-version '(Org . "9.8")
+  :type 'string)
+
 ;;;###autoload
 (put 'org-html-head-include-default-style 'safe-local-variable 'booleanp)
 (put 'org-html-multipage-head-include-default-style 'safe-local-variable 'booleanp)
 (put 'org-html-multipage-join-empty-bodies 'safe-local-variable 'booleanp)
+(put 'org-html-multipage-export-directory 'safe-local-variable 'stringp)
 
 (defcustom org-html-head ""
   "Org-wide head definitions for exported HTML files.
@@ -2491,7 +2517,7 @@ communication channel."
 	     (org-element-normalize-string section-contents)
 	     (format "</%s>\n" (nth 1 div)))))))))
 
-(defun org-html-inner-template (contents info &optional data)
+(defun org-html-inner-template (contents info)
   "Return body of document string after HTML conversion.
 CONTENTS is the transcoded contents string.  INFO is a plist
 holding export options."
@@ -4473,8 +4499,14 @@ INFO is the communication channel.
                       (cl-mapcar 'cons
                                  (mapcar 'car headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
-          (setq global-info info) ;;; for debugging purposes, remove later
           (plist-put info :multipage-toc-lookup (org-html--make-multipage-toc-lookup info))
+          (plist-put info :html-top-url
+                       (alist-get
+                        (car (plist-get info :section-trees))
+                        (plist-get global-info :tl-url-lookup)))
+          (plist-put info :html-top-title
+                       (org-element-title
+                        (car (plist-get info :section-trees))))
           (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
            for file in section-filenames
@@ -4735,14 +4767,14 @@ section and its navigation."
                         (next (cadr curr-entry)))
                     (if curr
                         (cons (list (car curr)
-                                    :prev-title (nth 1 prev)
-                                    :curr-title (nth 1 curr)
-                                    :next-title (nth 1 next)
-                                    :up-title (nth 3 curr)
-                                    :prev-url (nth 2 prev)
-                                    :curr-url (nth 2 curr)
-                                    :next-url (nth 2 next)
-                                    :up-url (nth 4 curr))
+                                    :prev-title (or (nth 1 prev) "")
+                                    :curr-title (or (nth 1 curr) "")
+                                    :next-title (or (nth 1 next) "")
+                                    :up-title (or (nth 3 curr) "")
+                                    :prev-url (or (nth 2 prev) "")
+                                    :curr-url (or (nth 2 curr) "")
+                                    :next-url (or (nth 2 next) "")
+                                    :up-url (or (nth 4 curr) ""))
                               (inner (cdr prev-entry) (cdr curr-entry)))))))
       (inner (cons nil nav) nav))))
 
@@ -4997,19 +5029,6 @@ INFO is a plist used as a communication channel.
       (format "<nav id=\"nav-right\"><a href=\"%s\" class=\"nav-right\"><i class=\"angle-right-inactive\"></i></a></nav>"
               ""))))
 
-(defun org-html-nav-up (nav-lookup)
-  "Return nav string for multipage Navigation.
-
-INFO is a plist used as a communication channel.
-"
-  (let* ((up-url (plist-get nav-lookup :up-url))
-         (up-title (plist-get nav-lookup :up-title)))
-    (if up-url
-        (format "<nav id=\"nav-up\"><a href=\"%s\" class=\"nav-up\"><i class=\"angle-up\"></i></a></nav>"
-                up-url)
-      (format "<nav id=\"nav-up\"><a href=\"%s\" class=\"nav-up\"><i class=\"angle-up-inactive\"></i></a></nav>"
-                ""))))
-
 (defun org-html-multipage-template (contents info)
   "Return complete document string after HTML conversion.
 CONTENTS is the transcoded contents string.  INFO is a plist
@@ -5045,12 +5064,20 @@ holding export options."
    (org-html--build-mathjax-config info)
    "</head>\n"
    "<body>\n"
-   (let ((link-up (org-trim (plist-get info :html-link-up)))
-	 (link-home (org-trim (plist-get info :html-link-home))))
-     (unless (and (string= link-up "") (string= link-home ""))
-       (format (plist-get info :html-home/up-format)
-	       (or link-up link-home)
-	       (or link-home link-up))))
+   (let ((section-nav-lookup
+          (alist-get
+           (plist-get info :tl-headline)
+           (plist-get info :section-nav-lookup))))
+     (format (plist-get info :html-multipage-nav-format)
+             (plist-get section-nav-lookup :next-url)
+             (plist-get section-nav-lookup :next-title)
+             (plist-get section-nav-lookup :prev-url)
+             (plist-get section-nav-lookup :prev-title)
+             (plist-get section-nav-lookup :up-url)
+             (plist-get section-nav-lookup :up-title)
+             (plist-get info :html-top-url)
+             (plist-get info :html-top-title)
+             ))
    ;; Preamble.
    (org-html--build-pre/postamble 'preamble info)
    ;; Document contents.
@@ -5103,10 +5130,12 @@ DATA contains the subtree of the parse tree of the section to be
 exported for multipage export.
 "
   ;; Navigation
-  (let ((section-nav-lookup
-         (alist-get data (plist-get info :section-nav-lookup))))
-    (format "<div id=\"page-main-body\">%s\n%s\n<div id=\"page-text-body\">%s</div>%s</div>"
-            (org-html-nav-up section-nav-lookup)
+  (let* ((data (plist-get info :tl-headline))
+         (section-nav-lookup
+             (alist-get
+              data
+              (plist-get info :section-nav-lookup))))
+    (format "<div id=\"page-main-body\">%s\n<div id=\"page-text-body\">%s</div>%s</div>"
             (org-html-nav-left section-nav-lookup)
             (concat
              ;; Document contents.

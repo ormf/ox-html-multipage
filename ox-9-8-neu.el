@@ -3109,7 +3109,7 @@ backend and return the string."
 	 (full-body (org-export-filter-apply-functions
 		     (plist-get info :filter-body)
 		     (if (not (functionp inner-template)) body
-                         (funcall inner-template body info headline))
+                         (funcall inner-template body info))
 		     info))
 	 (template (if (plist-get info :multipage)
                        (cdr (assq 'multipage-template
