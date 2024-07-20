@@ -163,11 +163,14 @@
     (:html-mathjax-template nil nil org-html-mathjax-template)
     (:html-metadata-timestamp-format nil nil org-html-metadata-timestamp-format)
     (:html-multipage-head-include-default-style
-     nil "html-multipage-style" org-html-multipage-head-include-default-style)
+     nil "html-multipage-include-default-style" org-html-multipage-head-include-default-style)
     (:html-multipage-join-empty-bodies
      nil "html-multipage-join-empty-bodies" org-html-multipage-join-empty-bodies)
     (:html-multipage-export-directory
      nil "html-multipage-export-directory" org-html-multipage-export-directory)
+    (:html-multipage-nav-format nil nil org-html-multipage-nav-format)
+    (:html-multipage-split nil "html-multipage-split" org-html-multipage-split)
+    (:html-multipage-open nil "html-multipage-open" org-html-multipage-open)
     (:html-multipage-nav-format nil nil org-html-multipage-nav-format)
     (:html-postamble-format nil nil org-html-postamble-format)
     (:html-preamble-format nil nil org-html-preamble-format)
@@ -478,16 +481,15 @@ customize `org-html-head-include-default-style'."
 #content { margin: auto;
            display: grid;
            position: absolute;
-           width: 90%;
-           grid-template-rows: 0em 7em 1fr;
+           padding-top: 1em;
+           grid-template-rows: 4em 1fr;
            grid-template-columns: 27em 1fr;
-           grid-template-areas: \"toc nav\"
-                                \"toc menu\"
+           grid-template-areas: \"toc title\"
                                 \"toc content\";
 }
 
 header {
-    grid-area: menu;
+    grid-area: title;
 }
 
 #table-of-contents {
@@ -498,203 +500,197 @@ header {
 #page-main-body {
     grid-area: content;
     height: 100%;
-    display: flex;
     overflow: auto;
-    width: 60hw;
+    padding: 4em;
 }
-  .title  { text-align: center;
-             margin-bottom: .2em; }
-  .subtitle { text-align: center;
-              font-size: medium;
-              font-weight: bold;
-              margin-top:0; }
-  .todo   { font-family: monospace; color: red; }
-  .done   { font-family: monospace; color: green; }
-  .priority { font-family: monospace; color: orange; }
-  .tag    { background-color: #eee; font-family: monospace;
-            padding: 2px; font-size: 80%; font-weight: normal; }
-  .timestamp { color: #bebebe; }
-  .timestamp-kwd { color: #5f9ea0; }
-  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
-  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
-  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
-  .underline { text-decoration: underline; }
-  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
-  p.verse { margin-left: 3%; }
-  pre {
-    border: 1px solid #e6e6e6;
-    border-radius: 3px;
-    background-color: #f2f2f2;
-    padding: 8pt;
-    font-family: monospace;
-    overflow: auto;
-    margin: 1.2em;
-  }
-  pre.src {
-    position: relative;
-    overflow: auto;
-  }
-  pre.src:before {
-    display: none;
-    position: absolute;
-    top: -8px;
-    right: 12px;
-    padding: 3px;
-    color: #555;
-    background-color: #f2f2f299;
-  }
-  pre.src:hover:before { display: inline; margin-top: 14px;}
-  /* Languages per Org manual */
-  pre.src-asymptote:before { content: 'Asymptote'; }
-  pre.src-awk:before { content: 'Awk'; }
-  pre.src-authinfo::before { content: 'Authinfo'; }
-  pre.src-C:before { content: 'C'; }
-  /* pre.src-C++ doesn't work in CSS */
-  pre.src-clojure:before { content: 'Clojure'; }
-  pre.src-css:before { content: 'CSS'; }
-  pre.src-D:before { content: 'D'; }
-  pre.src-ditaa:before { content: 'ditaa'; }
-  pre.src-dot:before { content: 'Graphviz'; }
-  pre.src-calc:before { content: 'Emacs Calc'; }
-  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
-  pre.src-fortran:before { content: 'Fortran'; }
-  pre.src-gnuplot:before { content: 'gnuplot'; }
-  pre.src-haskell:before { content: 'Haskell'; }
-  pre.src-hledger:before { content: 'hledger'; }
-  pre.src-java:before { content: 'Java'; }
-  pre.src-js:before { content: 'Javascript'; }
-  pre.src-latex:before { content: 'LaTeX'; }
-  pre.src-ledger:before { content: 'Ledger'; }
-  pre.src-lisp:before { content: 'Lisp'; }
-  pre.src-lilypond:before { content: 'Lilypond'; }
-  pre.src-lua:before { content: 'Lua'; }
-  pre.src-matlab:before { content: 'MATLAB'; }
-  pre.src-mscgen:before { content: 'Mscgen'; }
-  pre.src-ocaml:before { content: 'Objective Caml'; }
-  pre.src-octave:before { content: 'Octave'; }
-  pre.src-org:before { content: 'Org mode'; }
-  pre.src-oz:before { content: 'OZ'; }
-  pre.src-plantuml:before { content: 'Plantuml'; }
-  pre.src-processing:before { content: 'Processing.js'; }
-  pre.src-python:before { content: 'Python'; }
-  pre.src-R:before { content: 'R'; }
-  pre.src-ruby:before { content: 'Ruby'; }
-  pre.src-sass:before { content: 'Sass'; }
-  pre.src-scheme:before { content: 'Scheme'; }
-  pre.src-screen:before { content: 'Gnu Screen'; }
-  pre.src-sed:before { content: 'Sed'; }
-  pre.src-sh:before { content: 'shell'; }
-  pre.src-sql:before { content: 'SQL'; }
-  pre.src-sqlite:before { content: 'SQLite'; }
-  /* additional languages in org.el's org-babel-load-languages alist */
-  pre.src-forth:before { content: 'Forth'; }
-  pre.src-io:before { content: 'IO'; }
-  pre.src-J:before { content: 'J'; }
-  pre.src-makefile:before { content: 'Makefile'; }
-  pre.src-maxima:before { content: 'Maxima'; }
-  pre.src-perl:before { content: 'Perl'; }
-  pre.src-picolisp:before { content: 'Pico Lisp'; }
-  pre.src-scala:before { content: 'Scala'; }
-  pre.src-shell:before { content: 'Shell Script'; }
-  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
-  /* additional language identifiers per \"defun org-babel-execute\"
-       in ob-*.el */
-  pre.src-cpp:before  { content: 'C++'; }
-  pre.src-abc:before  { content: 'ABC'; }
-  pre.src-coq:before  { content: 'Coq'; }
-  pre.src-groovy:before  { content: 'Groovy'; }
-  /* additional language identifiers from org-babel-shell-names in
-     ob-shell.el: ob-shell is the only babel language using a lambda to put
-     the execution function name together. */
-  pre.src-bash:before  { content: 'bash'; }
-  pre.src-csh:before  { content: 'csh'; }
-  pre.src-ash:before  { content: 'ash'; }
-  pre.src-dash:before  { content: 'dash'; }
-  pre.src-ksh:before  { content: 'ksh'; }
-  pre.src-mksh:before  { content: 'mksh'; }
-  pre.src-posh:before  { content: 'posh'; }
-  /* Additional Emacs modes also supported by the LaTeX listings package */
-  pre.src-ada:before { content: 'Ada'; }
-  pre.src-asm:before { content: 'Assembler'; }
-  pre.src-caml:before { content: 'Caml'; }
-  pre.src-delphi:before { content: 'Delphi'; }
-  pre.src-html:before { content: 'HTML'; }
-  pre.src-idl:before { content: 'IDL'; }
-  pre.src-mercury:before { content: 'Mercury'; }
-  pre.src-metapost:before { content: 'MetaPost'; }
-  pre.src-modula-2:before { content: 'Modula-2'; }
-  pre.src-pascal:before { content: 'Pascal'; }
-  pre.src-ps:before { content: 'PostScript'; }
-  pre.src-prolog:before { content: 'Prolog'; }
-  pre.src-simula:before { content: 'Simula'; }
-  pre.src-tcl:before { content: 'tcl'; }
-  pre.src-tex:before { content: 'TeX'; }
-  pre.src-plain-tex:before { content: 'Plain TeX'; }
-  pre.src-verilog:before { content: 'Verilog'; }
-  pre.src-vhdl:before { content: 'VHDL'; }
-  pre.src-xml:before { content: 'XML'; }
-  pre.src-nxml:before { content: 'XML'; }
-  /* add a generic configuration mode; LaTeX export needs an additional
-     (add-to-list 'org-latex-listings-langs '(conf \" \")) in .emacs */
-  pre.src-conf:before { content: 'Configuration File'; }
 
-  table { border-collapse:collapse; }
-  caption.t-above { caption-side: top; }
-  caption.t-bottom { caption-side: bottom; }
-  td, th { vertical-align:top;  }
-  th.org-right  { text-align: center;  }
-  th.org-left   { text-align: center;   }
-  th.org-center { text-align: center; }
-  td.org-right  { text-align: right;  }
-  td.org-left   { text-align: left;   }
-  td.org-center { text-align: center; }
-  dt { font-weight: bold; }
-  .footpara { display: inline; }
-  .footdef  { margin-bottom: 1em; }
-  .figure { padding: 1em; }
-  .figure p { text-align: center; }
-  .equation-container {
-    display: table;
-    text-align: center;
+#page-text-body {
+    height: 100%;
     width: 100%;
-  }
-  .equation {
-    vertical-align: middle;
-  }
-  .equation-label {
-    display: table-cell;
-    text-align: right;
-    vertical-align: middle;
-  }
-  .inlinetask {
-    padding: 10px;
-    border: 2px solid gray;
-    margin: 10px;
-    background: #ffffcc;
-  }
-  a.nav-left::before {
-    content: 'prev';
-  }
-  a.nav-up::before {
-    content: 'up';
-  }
-  a.nav-right::before {
-    content: 'next';
-  }
-  a.nav-top::before {
-    content: 'top';
-  }
-  #org-div-home-and-up
-   { text-align: right; font-size: 70%; white-space: nowrap; }
-  textarea { overflow-x: auto; }
-  .linenr { font-size: smaller }
-  .code-highlighted { background-color: #ffff00; }
-  .org-info-js_info-navigation { border-style: none; }
-  #org-info-js_console-label
-    { font-size: 10px; font-weight: bold; white-space: nowrap; }
-  .org-info-js_search-highlight
-    { background-color: #ffff00; color: #000000; font-weight: bold; }
-  .org-svg { }
+    overflow: auto;
+}
+
+.title  { text-align: center;
+           margin-bottom: .2em; }
+.subtitle { text-align: center;
+            font-size: medium;
+            font-weight: bold;
+            margin-top:0; }
+.todo   { font-family: monospace; color: red; }
+.done   { font-family: monospace; color: green; }
+.priority { font-family: monospace; color: orange; }
+.tag    { background-color: #eee; font-family: monospace;
+          padding: 2px; font-size: 80%; font-weight: normal; }
+.timestamp { color: #bebebe; }
+.timestamp-kwd { color: #5f9ea0; }
+.org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+.org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+.org-center { margin-left: auto; margin-right: auto; text-align: center; }
+.underline { text-decoration: underline; }
+#postamble p, #preamble p { font-size: 90%; margin: .2em; }
+p.verse { margin-left: 3%; }
+pre {
+  border: 1px solid #e6e6e6;
+  border-radius: 3px;
+  background-color: #f2f2f2;
+  padding: 8pt;
+  font-family: monospace;
+  overflow: auto;
+  margin: 1.2em;
+}
+pre.src {
+  position: relative;
+  overflow: auto;
+}
+pre.src:before {
+  display: none;
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  padding: 3px;
+  color: #555;
+  background-color: #f2f2f299;
+}
+pre.src:hover:before { display: inline; margin-top: 14px;}
+/* Languages per Org manual */
+pre.src-asymptote:before { content: 'Asymptote'; }
+pre.src-awk:before { content: 'Awk'; }
+pre.src-authinfo::before { content: 'Authinfo'; }
+pre.src-C:before { content: 'C'; }
+/* pre.src-C++ doesn't work in CSS */
+pre.src-clojure:before { content: 'Clojure'; }
+pre.src-css:before { content: 'CSS'; }
+pre.src-D:before { content: 'D'; }
+pre.src-ditaa:before { content: 'ditaa'; }
+pre.src-dot:before { content: 'Graphviz'; }
+pre.src-calc:before { content: 'Emacs Calc'; }
+pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+pre.src-fortran:before { content: 'Fortran'; }
+pre.src-gnuplot:before { content: 'gnuplot'; }
+pre.src-haskell:before { content: 'Haskell'; }
+pre.src-hledger:before { content: 'hledger'; }
+pre.src-java:before { content: 'Java'; }
+pre.src-js:before { content: 'Javascript'; }
+pre.src-latex:before { content: 'LaTeX'; }
+pre.src-ledger:before { content: 'Ledger'; }
+pre.src-lisp:before { content: 'Lisp'; }
+pre.src-lilypond:before { content: 'Lilypond'; }
+pre.src-lua:before { content: 'Lua'; }
+pre.src-matlab:before { content: 'MATLAB'; }
+pre.src-mscgen:before { content: 'Mscgen'; }
+pre.src-ocaml:before { content: 'Objective Caml'; }
+pre.src-octave:before { content: 'Octave'; }
+pre.src-org:before { content: 'Org mode'; }
+pre.src-oz:before { content: 'OZ'; }
+pre.src-plantuml:before { content: 'Plantuml'; }
+pre.src-processing:before { content: 'Processing.js'; }
+pre.src-python:before { content: 'Python'; }
+pre.src-R:before { content: 'R'; }
+pre.src-ruby:before { content: 'Ruby'; }
+pre.src-sass:before { content: 'Sass'; }
+pre.src-scheme:before { content: 'Scheme'; }
+pre.src-screen:before { content: 'Gnu Screen'; }
+pre.src-sed:before { content: 'Sed'; }
+pre.src-sh:before { content: 'shell'; }
+pre.src-sql:before { content: 'SQL'; }
+pre.src-sqlite:before { content: 'SQLite'; }
+/* additional languages in org.el's org-babel-load-languages alist */
+pre.src-forth:before { content: 'Forth'; }
+pre.src-io:before { content: 'IO'; }
+pre.src-J:before { content: 'J'; }
+pre.src-makefile:before { content: 'Makefile'; }
+pre.src-maxima:before { content: 'Maxima'; }
+pre.src-perl:before { content: 'Perl'; }
+pre.src-picolisp:before { content: 'Pico Lisp'; }
+pre.src-scala:before { content: 'Scala'; }
+pre.src-shell:before { content: 'Shell Script'; }
+pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+/* additional language identifiers per \"defun org-babel-execute\"
+     in ob-*.el */
+pre.src-cpp:before  { content: 'C++'; }
+pre.src-abc:before  { content: 'ABC'; }
+pre.src-coq:before  { content: 'Coq'; }
+pre.src-groovy:before  { content: 'Groovy'; }
+/* additional language identifiers from org-babel-shell-names in
+   ob-shell.el: ob-shell is the only babel language using a lambda to put
+   the execution function name together. */
+pre.src-bash:before  { content: 'bash'; }
+pre.src-csh:before  { content: 'csh'; }
+pre.src-ash:before  { content: 'ash'; }
+pre.src-dash:before  { content: 'dash'; }
+pre.src-ksh:before  { content: 'ksh'; }
+pre.src-mksh:before  { content: 'mksh'; }
+pre.src-posh:before  { content: 'posh'; }
+/* Additional Emacs modes also supported by the LaTeX listings package */
+pre.src-ada:before { content: 'Ada'; }
+pre.src-asm:before { content: 'Assembler'; }
+pre.src-caml:before { content: 'Caml'; }
+pre.src-delphi:before { content: 'Delphi'; }
+pre.src-html:before { content: 'HTML'; }
+pre.src-idl:before { content: 'IDL'; }
+pre.src-mercury:before { content: 'Mercury'; }
+pre.src-metapost:before { content: 'MetaPost'; }
+pre.src-modula-2:before { content: 'Modula-2'; }
+pre.src-pascal:before { content: 'Pascal'; }
+pre.src-ps:before { content: 'PostScript'; }
+pre.src-prolog:before { content: 'Prolog'; }
+pre.src-simula:before { content: 'Simula'; }
+pre.src-tcl:before { content: 'tcl'; }
+pre.src-tex:before { content: 'TeX'; }
+pre.src-plain-tex:before { content: 'Plain TeX'; }
+pre.src-verilog:before { content: 'Verilog'; }
+pre.src-vhdl:before { content: 'VHDL'; }
+pre.src-xml:before { content: 'XML'; }
+pre.src-nxml:before { content: 'XML'; }
+/* add a generic configuration mode; LaTeX export needs an additional
+   (add-to-list 'org-latex-listings-langs '(conf \" \")) in .emacs */
+pre.src-conf:before { content: 'Configuration File'; }
+
+table { border-collapse:collapse; }
+caption.t-above { caption-side: top; }
+caption.t-bottom { caption-side: bottom; }
+td, th { vertical-align:top;  }
+th.org-right  { text-align: center;  }
+th.org-left   { text-align: center;   }
+th.org-center { text-align: center; }
+td.org-right  { text-align: right;  }
+td.org-left   { text-align: left;   }
+td.org-center { text-align: center; }
+dt { font-weight: bold; }
+.footpara { display: inline; }
+.footdef  { margin-bottom: 1em; }
+.figure { padding: 1em; }
+.figure p { text-align: center; }
+.equation-container {
+  display: table;
+  text-align: center;
+  width: 100%;
+}
+.equation {
+  vertical-align: middle;
+}
+.equation-label {
+  display: table-cell;
+  text-align: right;
+  vertical-align: middle;
+}
+.inlinetask {
+  padding: 10px;
+  border: 2px solid gray;
+  margin: 10px;
+  background: #ffffcc;
+}
+#org-div-home-and-up
+ { text-align: right; font-size: 70%; white-space: nowrap; }
+textarea { overflow-x: auto; }
+.linenr { font-size: smaller }
+.code-highlighted { background-color: #ffff00; }
+.org-info-js_info-navigation { border-style: none; }
+#org-info-js_console-label
+  { font-size: 10px; font-weight: bold; white-space: nowrap; }
+.org-info-js_search-highlight
+  { background-color: #ffff00; color: #000000; font-weight: bold; }
+.org-svg { }
 </style>"
   "The default style specification for exported HTML files.
 You can use `org-html-head' and `org-html-head-extra' to add to
@@ -1784,11 +1780,11 @@ Example:
 * Headline 1
 ** Subheadline 1.1
 *** Subsubheadline 1.1.1
-    Text of Subsubheadline 1
+    Text of Subsubheadline 1.1.1
 
 will be put on the same HTML page if this option is set,
-otherwise each (Sub)Headline will be put on a separate HTML page with
-empty content.
+otherwise Headline 1 And Subheadline 1.1 will be put on a
+separate HTML page with empty content.
 "
   :group 'org-export-html
   :version "29.4"
@@ -1818,11 +1814,35 @@ the second the title"
   :package-version '(Org . "9.8")
   :type 'list)
 
+(defcustom org-html-multipage-open nil
+  "If and where to open the top page of the multipage html after
+export."
+  :group 'org-export-html
+  :version "29.4"
+  :package-version '(Org . "9.8")
+  :type '(choice (const browser) (const buffer) (const nil)))
+
+(defcustom org-html-multipage-split 'toc
+  "How to split the ORG file into multiple HTML pages.
+
+   toc - split each entry of the toc into a separate page.
+
+   export-filename - split for each headline with the
+                     :EXPORT_FILENAME: property set.
+
+   number - a number indicates the maximum headline-level for
+            splitting.
+"
+  :group 'org-export-html
+  :version "29.4"
+  :package-version '(Org . "9.8")
+  :type '(choice (const toc) (const export-filename) (number :tag "Headline Level" 3)))
+
 ;;;###autoload
 (put 'org-html-head-include-default-style 'safe-local-variable 'booleanp)
 (put 'org-html-multipage-head-include-default-style 'safe-local-variable 'booleanp)
 (put 'org-html-multipage-join-empty-bodies 'safe-local-variable 'booleanp)
-(put 'org-html-multipage-export-directory 'safe-local-variable 'stringp)
+(put 'org-html-multipage-split 'safe-local-variable 'stringp)
 
 (defcustom org-html-head ""
   "Org-wide head definitions for exported HTML files.
@@ -4427,6 +4447,17 @@ CONTENTS is the exported HTML code.  INFO is the info plist."
       (indent-region (point-min) (point-max)))
     (buffer-substring-no-properties (point-min) (point-max))))
 
+(defun org-html-multipage-ensure-export-dir (info)
+  "get the full pathname of `html-multipage-export-directory'
+and ensure it exists."
+  (let ((dir (plist-get global-info :html-multipage-export-directory)))
+    (when (symbolp dir) (setq dir (format "%s" dir)))
+    (unless (= (aref dir 0) 47)
+      (setq dir (concat (file-name-directory (buffer-file-name)) dir)))
+    (unless (file-directory-p dir)
+      (make-directory dir :parents))
+    dir))
+
 (defun org-html-process-multipage (info &optional body-only)
   "Central routine for multipage output called by
 `org-export-as'. The completed parse-tree of the document is in
@@ -4437,7 +4468,7 @@ determining the file names and writing them to file.
 INFO is the communication channel.
 "
 ;;;  (message "writing '%s'" file)
-  (let ((dir (plist-get info :export-directory))
+  (let ((dir (org-html-multipage-ensure-export-dir info))
         (async (plist-get info :async))
         (post-process (plist-get info :post-process)))
     (declare (indent 2))
@@ -4492,8 +4523,8 @@ INFO is the communication channel.
         (plist-put info :tl-url-lookup (org-html--generate-tl-url-lookup info))
         (plist-put info :section-nav-lookup (org-export--make-section-nav-lookup info))
         (let ((section-filenames (mapcar
-                    (lambda (hl) (alist-get hl (plist-get info :tl-url-lookup)))
-                    section-trees)))
+                                  (lambda (hl) (alist-get hl (plist-get info :tl-url-lookup)))
+                                  section-trees)))
           (plist-put info :section-filenames section-filenames)
           (plist-put info :stripped-hl-to-parse-tree-hl
                      (append
@@ -4505,12 +4536,12 @@ INFO is the communication channel.
                                  (mapcar 'car stripped-section-headline-numbering))))
           (plist-put info :multipage-toc-lookup (org-html--make-multipage-toc-lookup info))
           (plist-put info :html-top-url
-                       (alist-get
-                        (car (plist-get info :section-trees))
-                        (plist-get global-info :tl-url-lookup)))
+                     (alist-get
+                      (car (plist-get info :section-trees))
+                      (plist-get global-info :tl-url-lookup)))
           (plist-put info :html-top-title
-                       (org-element-title
-                        (car (plist-get info :section-trees))))
+                     (org-element-title
+                      (car (plist-get info :section-trees))))
           (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
            for file in section-filenames
@@ -4536,7 +4567,11 @@ INFO is the communication channel.
                    (org-kill-new output))
                  ;; Get proper return value.
                  (or (and (functionp post-process) (funcall post-process file))
-                     file))))))))))
+                     file)))))
+          (message "done!")
+          (cl-case (plist-get info :html-multipage-open)
+            ('browser (org-open-file (format "%s/%s" dir (car section-filenames))))
+            ('buffer (find-file (format "%s/%s" dir (car section-filenames))))))))))
 
 
 ;;; End-user functions
@@ -4968,7 +5003,6 @@ Return output directory's name."
                                                           :async async
                                                           :post-process post-process
                                                           :multipage t
-                                                          :export-directory dir
                                                           ext-plist))))
 
 (defun org-html--headline-number-to-page-url (headline-number info)
