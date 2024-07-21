@@ -172,6 +172,7 @@
     (:html-multipage-split nil "html-multipage-split" org-html-multipage-split)
     (:html-multipage-open nil "html-multipage-open" org-html-multipage-open)
     (:html-multipage-nav-format nil nil org-html-multipage-nav-format)
+    (:html-multipage-toc-to-top nil "html-multipage-toc-to-top" org-html-multipage-toc-to-top)
     (:html-postamble-format nil nil org-html-postamble-format)
     (:html-preamble-format nil nil org-html-preamble-format)
     (:html-prefer-user-labels nil nil org-html-prefer-user-labels)
@@ -187,7 +188,7 @@
     (:html-text-markup-alist nil nil org-html-text-markup-alist)
     (:html-todo-kwd-class-prefix nil nil org-html-todo-kwd-class-prefix)
     (:html-toplevel-hlevel nil nil org-html-toplevel-hlevel)
-    (:html-use-infojs nil nil org-html-use-infojs)
+    (:html-use-infojs nil nil org-export-html-use-infojs)
     (:html-validation-link nil nil org-html-validation-link)
     (:html-viewport nil nil org-html-viewport)
     (:html-inline-images nil nil org-html-inline-images)
@@ -724,7 +725,7 @@ customize `org-html-head-include-default-style'."
     (home LINK_HOME :html-link-home))
   "JavaScript options, long form for script, default values.")
 
-(defcustom org-html-use-infojs 'when-configured
+(defcustom org-export-html-use-infojs 'when-configured
   "Non-nil when Sebastian Rose's Java Script org-info.js should be active.
 This option can be nil or t to never or always use the script.
 It can also be the symbol `when-configured', meaning that the
@@ -1171,7 +1172,7 @@ When exporting to HTML5, these values will be disregarded."
   :type '(plist :key-type (symbol :tag "Property")
 		:value-type (string :tag "Value")))
 
-(defcustom org-html-table-header-tags '("<th scope=\"%s\"%s>" . "</th>")
+ (defcustom org-html-table-header-tags '("<th scope=\"%s\"%s>" . "</th>")
   "The opening and ending tags for table header fields.
 This is customizable so that alignment options can be specified.
 The first %s will be filled with the scope of the field, either row or col.
@@ -1799,9 +1800,9 @@ separate HTML page with empty content.
 
 (defcustom org-html-multipage-nav-format
   '("<div id=\"org-div-nav-menu\">%s</div>"
-"Next: <a accesskey=\"n\" href=\"%s\"> %s </a>,"
-"Previous: <a accesskey=\"p\" href=\"%s\"> %s </a>,"
-"Up: <a accesskey=\"u\" href=\"%s\"> %s </a>,"
+"Next: <a accesskey=\"n\" href=\"%s\"> %s </a>,&nbsp;"
+"Previous: <a accesskey=\"p\" href=\"%s\"> %s </a>,&nbsp;"
+"Up: <a accesskey=\"u\" href=\"%s\"> %s </a>,&nbsp;"
 "Home: <a accesskey=\"h\" href=\"%s\"> %s </a>")
   "Snippets used to insert the NEXT, PREV, HOME and UP links in
 multipage output. The list contains format strings for the HTML
@@ -1814,7 +1815,7 @@ the second the title"
   :package-version '(Org . "9.8")
   :type 'list)
 
-(defcustom org-html-multipage-open nil
+(defcustom org-html-multipage-open 'nil
   "If and where to open the top page of the multipage html after
 export."
   :group 'org-export-html
@@ -1827,16 +1828,22 @@ export."
 
    toc - split each entry of the toc into a separate page.
 
-   export-filename - split for each headline with the
-                     :EXPORT_FILENAME: property set.
-
-   number - a number indicates the maximum headline-level for
+   number - a number indicating the maximum headline-level for
             splitting.
 "
   :group 'org-export-html
   :version "29.4"
   :package-version '(Org . "9.8")
-  :type '(choice (const toc) (const export-filename) (number :tag "Headline Level" 3)))
+  :type '(choice (const toc) (number :tag "Headline Level" 3)))
+
+(defcustom org-html-multipage-toc-to-top t
+  "If t Links in the TOC will always point to the top of the page,
+otherwise it will link directly to the referenced headline
+element."
+  :group 'org-export-html
+  :version "29.4"
+  :package-version '(Org . "9.8")
+  :type 'boolean)
 
 ;;;###autoload
 (put 'org-html-head-include-default-style 'safe-local-variable 'booleanp)
@@ -4463,11 +4470,12 @@ and ensure it exists."
         (headline-numbering (plist-get info :headline-numbering)))
     (cond
      ((eq split-ref 'toc)
-      (plist-put info :export-depth (or (plist-get info :with-toc) 0))
-      (handle-join-empty-body
-       (cl-remove-if (lambda (hl-num) (> (length hl-num) (or (plist-get info :with-toc) 0)))
-                     headline-numbering :key 'cdr)
-       info))
+      (let ((maxdepth (or (plist-get info :with-toc) 24)))
+        (plist-put info :export-depth maxdepth)
+        (handle-join-empty-body
+         (cl-remove-if (lambda (hl-num) (> (length hl-num) maxdepth))
+                       headline-numbering :key 'cdr)
+         info)))
      ((eq split-ref 'export-filename))
      ((numberp split-ref)
       (plist-put info :export-depth split-ref)
@@ -4492,7 +4500,11 @@ INFO is the communication channel.
     (declare (indent 2))
     (if (not (file-writable-p dir)) (error "Output dir not writable")
       (let* ((encoding (or org-export-coding-system buffer-file-coding-system))
-             (headline-numbering (plist-get info :headline-numbering))
+             (headline-numbering
+              (progn
+                (plist-put info :orig-headline-numbering
+                           (plist-get info :headline-numbering))
+                (plist-get info :headline-numbering)))
 ;;;           (pt-hl-lookup (reverse-assoc-list headline-numbering))
              ;; each entry in exported-headline-numbering will become a
              ;; single page in multipage output.
@@ -4508,7 +4520,8 @@ INFO is the communication channel.
                          (if (< (length section-number) max-toc-depth)
                              (org-element-remove-subheadlines
                               (car section-entry)
-                              (plist-get info :html-multipage-join-empty-bodies))
+                              (plist-get info :html-multipage-join-empty-bodies)
+                              max-toc-depth)
                            (org-element-copy-element (car section-entry))))))
              ;; stripped-section-headline-numbering is the equivalent of
              ;; headline-numbering but replacing the car of its elements
@@ -4839,13 +4852,13 @@ section and its navigation."
    (lambda (hl)
      (let* ((tl-hl (org-element-get-top-level hl)))
        (list hl
-             :href (org-html--full-reference hl info t)
+             :href (org-html--full-reference hl info (plist-get info :html-multipage-toc-to-top))
              :tl-hl tl-hl
              :relative-level (org-export-get-relative-level hl info)
              :toc-body (org-html--get-toc-body hl info)
              :toc-hl-number (alist-get hl (plist-get info :headline-numbering))
              :page-hl-number (org-export-get-multipage-headline-number hl info))))
-   (org-export-collect-local-headlines info (plist-get info :multipage-level) nil)))
+   (org-export-collect-local-headlines info nil)))
 
 (defun org-export-get-multipage-tl-headline (element info)
   "return the headline of the page containing
@@ -4922,11 +4935,11 @@ but referenced."
     (unless keep-parent (setf (org-element-property :parent new) nil))
     (apply 'org-element-adopt-elements new (org-element-contents org-node))))
 
-(defun org-element-remove-subheadlines (org-node &optional join-empty-bodies keep-parent)
+(defun org-element-remove-subheadlines (org-node &optional join-empty-bodies max-toc-depth keep-parent)
   "remove all elements starting with and including the first headline
-in the children of ORG-NODE. Returns a new ast with all elements
-starting at START-CHILD-IDX copied into it with the :parent
-property optionally removed in the top node."
+in the children of ORG-NODE if JOIN_EMPTY_BODIES is nil. Returns a
+new ast with all elements starting at START-CHILD-IDX copied into
+it with the :parent property optionally removed in the top node."
   (let* (contents-end
          headline
          (props (copy-sequence (nth 1 org-node)))
@@ -4939,8 +4952,8 @@ property optionally removed in the top node."
                                 (consp x)
                                 (eq (org-element-type x) 'headline))
                                (if (and join-empty-bodies (= i 0))
-                                   (progn
-                                     (setq x (org-element-remove-subheadlines x join-empty-bodies)))
+                                   (if (< (org-element-property :level x) max-toc-depth)
+                                       (setq x (org-element-remove-subheadlines x join-empty-bodies max-toc-depth)))
                                  (progn
                                    (setq contents-end (org-element-property :begin x))
                                    (setq exit t))))
@@ -4958,8 +4971,8 @@ headline-number."
     (caar headline-numbering))
    (t (find-headline headline-number (cdr headline-numbering)))))
 
-(defun body-empty? (element)
-  "check if first child of element is a headline"
+(defun body-text? (element)
+  "check if first child of element is *not* a headline."
   (not (eq (org-element-type (car (org-element-contents element)))
            'headline)))
 
@@ -4967,7 +4980,9 @@ headline-number."
   (if (plist-get info :html-multipage-join-empty-bodies)
       (cl-loop for (prev curr-headline) on (cons nil headlines)
                while curr-headline
-               if (body-empty? (car prev))
+               if (or (body-text? (car prev)) ;; prev has body text or is nil
+                      (>= (length (cdr prev)) ;; curr-headline is not a subheadline of prev.
+                          (length (cdr curr-headline))))
                collect curr-headline)
     headlines))
 
@@ -5013,13 +5028,13 @@ Return output directory's name."
 		     (or (plist-get ext-plist :html-extension)
 			 org-html-extension
 			 "html")))
-	 (dir (or "html" (org-export-output-file-name "" subtreep)))
 	 (org-export-coding-system org-html-coding-system))
-    (org-export-as 'html subtreep visible-only body-only (cl-list*
-                                                          :async async
-                                                          :post-process post-process
-                                                          :multipage t
-                                                          ext-plist))))
+    (org-export-as 'html subtreep visible-only body-only
+                   (cl-list*
+                    :async async
+                    :post-process post-process
+                    :multipage t
+                    ext-plist))))
 
 (defun org-html--headline-number-to-page-url (headline-number info)
   "Return the url of the page HEADLINE-NUMBER is on."
@@ -5045,7 +5060,7 @@ toc of the page containing TL-HEADLINE-NUMBER."
       (t (not (equal (butlast headline-number)
                      (butlast (butlast tl-headline-number)))))))))
 
-(defun org-export-collect-local-headlines (info depth scope)
+(defun org-export-collect-local-headlines (info scope)
   "Collect all headlines of headline-numbering from their local
 tl-headlines counterparts."
   (let ((tl-headline-lookup (plist-get info :tl-hl-lookup))
@@ -5055,7 +5070,7 @@ tl-headlines counterparts."
        (cdr
         (assoc (cdr (assoc global-headline headline-numbering))
                tl-headline-lookup)))
-     (org-export-collect-headlines info depth scope))))
+     (org-export-collect-headlines info (or (plist-get info :with-toc) 24) scope))))
 
 (defun org-html-nav-left (nav-lookup)
   "Return nav string for multipage Navigation.
