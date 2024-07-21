@@ -4458,6 +4458,24 @@ and ensure it exists."
       (make-directory dir :parents))
     dir))
 
+(defun org-html-multipage-split-tree (info)
+  (let ((split-ref (plist-get info :html-multipage-split))
+        (headline-numbering (plist-get info :headline-numbering)))
+    (cond
+     ((eq split-ref 'toc)
+      (plist-put info :export-depth (or (plist-get info :with-toc) 0))
+      (handle-join-empty-body
+       (cl-remove-if (lambda (hl-num) (> (length hl-num) (or (plist-get info :with-toc) 0)))
+                     headline-numbering :key 'cdr)
+       info))
+     ((eq split-ref 'export-filename))
+     ((numberp split-ref)
+      (plist-put info :export-depth split-ref)
+      (handle-join-empty-body
+       (cl-remove-if (lambda (hl-num) (> (length hl-num) split-ref))
+                     headline-numbering :key 'cdr)
+       info)))))
+
 (defun org-html-process-multipage (info &optional body-only)
   "Central routine for multipage output called by
 `org-export-as'. The completed parse-tree of the document is in
@@ -4476,14 +4494,11 @@ INFO is the communication channel.
       (let* ((encoding (or org-export-coding-system buffer-file-coding-system))
              (headline-numbering (plist-get info :headline-numbering))
 ;;;           (pt-hl-lookup (reverse-assoc-list headline-numbering))
-             (max-toc-depth (or (plist-get info :with-toc) 0))
              ;; each entry in exported-headline-numbering will become a
              ;; single page in multipage output.
              (exported-headline-numbering
-              (handle-join-empty-body
-               (cl-remove-if (lambda (hl-num) (> (length hl-num) max-toc-depth))
-                             headline-numbering :key 'cdr)
-               (plist-get info :html-multipage-join-empty-bodies)))
+              (org-html-multipage-split-tree info))
+             (max-toc-depth (plist-get info :export-depth))
              ;; section-trees is a list of all sections which get
              ;; exported to a single page
              (section-trees
@@ -4534,6 +4549,7 @@ INFO is the communication channel.
                       (cl-mapcar 'cons
                                  (mapcar 'car headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
+          (setq global-info info) ;;; for debugging purposes, remove later
           (plist-put info :multipage-toc-lookup (org-html--make-multipage-toc-lookup info))
           (plist-put info :html-top-url
                      (alist-get
@@ -4829,7 +4845,7 @@ section and its navigation."
              :toc-body (org-html--get-toc-body hl info)
              :toc-hl-number (alist-get hl (plist-get info :headline-numbering))
              :page-hl-number (org-export-get-multipage-headline-number hl info))))
-   (org-export-collect-local-headlines info (plist-get info :with-toc) nil)))
+   (org-export-collect-local-headlines info (plist-get info :multipage-level) nil)))
 
 (defun org-export-get-multipage-tl-headline (element info)
   "return the headline of the page containing
@@ -4947,8 +4963,8 @@ headline-number."
   (not (eq (org-element-type (car (org-element-contents element)))
            'headline)))
 
-(defun handle-join-empty-body (headlines join?)
-  (if join?
+(defun handle-join-empty-body (headlines info)
+  (if (plist-get info :html-multipage-join-empty-bodies)
       (cl-loop for (prev curr-headline) on (cons nil headlines)
                while curr-headline
                if (body-empty? (car prev))
