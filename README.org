@@ -13,25 +13,22 @@
 ** Overview
 
    First attempt to extend org-html-export with multipage support. The
-   code has been developed on top of org 9.6.15
+   code has been developed using/extending org 9.8-pre.
 
    Note that the code is in development and currently destructively
-   modifies code of the html backend it is based on. This will be
-   fixed as soon as the code gets finalized. When running this code,
-   single page html export might stop working the way it has worked
-   before until the code has been finalized. In that case reload
-   ox-html.el from your current org installation to make it work
-   as before (or restart emacs).
+   modifies code of the html backend it is based on.
    
 ** Installation
 
    in emacs
 
-   =(load "ox-html-multipage.el")=
+   =(load "ox-html.el")=
+   =(load "ox.el")=
 
-   Switch to an org buffer to export
+   Switch to an org buffer to export. The following key binding should
+   export to a mutlipage html file located in the =html= subfolder of
+   the exported org file.
 
-   Before exporting ensure that a subfolder named "html" in the source
-   folder of the org document exists (create it if it doesn't exist).
+   =C-c C-e h m=
 
-   =M-x eval-expression <Return> (org-html-export-to-multipage-html) <Return>=
+   
