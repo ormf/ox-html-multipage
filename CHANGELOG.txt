@@ -58,6 +58,103 @@ ox-html.el
 
 - added the following functions:
 
+  `reverse-assoc-list'
+
+  `org-element-title'
+
+  `replace-chars-with-dash'
+
+  `remove-chars'
+
+  `string-to-backend-filename'
+
+  `string-prepend-section-numbering'
+
   `org-html--get-multipage-page-url'
 
   `org-html--full-reference'
+
+  `org-html-multipage-toc'
+
+  `org-html--get-toc-body'
+
+  `org-html--format-mp-toc-headline'
+
+  `org-html-multipage-ensure-export-dir'
+
+  `org-html-multipage-split-tree'
+
+  `org-html-process-multipage'
+
+  `org-export--make-section-url-lookup'
+
+  `org-html--generate-tl-url-lookup'
+
+  `org-export--make-section-nav-lookup'
+
+  `org-html--make-multipage-toc-lookup'
+
+  `org-export-get-multipage-tl-headline'
+
+  `org-export-get-multipage-headline-numbering'
+
+  `org-export-get-multipage-headline-number'
+
+  `org-export-get-multipage-tl-headline-numbering'
+
+  `org-export-get-multipage-tl-headline-number'
+
+  `org-export-link-name-to-headline-number'
+
+  `org-element-get-top-level'
+
+  `org-element-copy-element'
+
+  `org-element-remove-subheadlines'
+
+  `org-export-find-headline'
+
+  `org-element-body-text?'
+
+  `org-export-handle-join-empty-body'
+
+  `write-string-to-file'
+
+  `org-html-export-to-multipage-html'
+
+  `org-html--headline-number-to-page-url'
+
+  `org-html--hidden-in-toc?'
+
+  `org-export-collect-local-headlines'
+
+  `org-html-nav-left'
+
+  `org-html-nav-right'
+
+  `org-html-multipage-template'
+
+  `org-html-multipage-inner-template'
+
+- added multipage switches in
+
+  `org-html--build-head'
+
+- changed signature of toc-entries used in `org-html--toc-text' to
+  contain a "toc-hidden" attribute (used by multipage-output, ignored
+  in single-page-output).
+
+- changed `org-html--reference' to `org-html--full-reference' call in
+
+  `org-html-list-of-listings'
+
+  `org-html-list-of-tables'
+
+  `org-html-target'
+
+- changed multipage switch for numberedp in `org-html-headline'
+
+- added multipage switch to generate a full toc for inline TOC in
+  `org-html-keyword'
+
+- 
