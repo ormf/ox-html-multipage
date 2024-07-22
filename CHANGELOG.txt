@@ -96,6 +96,10 @@ ox-html.el
 
   `org-export-get-multipage-tl-headline'
 
+  `org-export-get-multipage-headline-numbering'
+
+  `org-export-get-multipage-headline-number'
+
   `org-element-get-top-level'
 
   `org-element-copy-element'

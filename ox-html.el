@@ -4504,11 +4504,11 @@ required."
    (plist-get global-info :tl-url-lookup)))
 
 (defun org-html--full-reference (destination info &optional page-only)
-  "Return an appropriate reference for DATUM. Like
+  "Return an appropriate reference for DESTINATION. Like
 org-html--reference, but generating an extended cross-page
 reference for multipage.
 
-DATUM is an element or a `target' type object.  INFO is the
+DESTINATION is an element or a `target' type object.  INFO is the
 current export state, as a plist.
 
 When PAGE-ONLY is non-nil just return the page reference."
