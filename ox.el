@@ -1623,7 +1623,6 @@ an alist where associations are (VARIABLE-NAME VALUE)."
 ;;
 ;; Tree properties used for transcoding are collected before
 ;; transcoding with `org-export--collect-tree-properties'.
-;;
 
 (defun org-export--collect-tree-properties (data info)
   "Extract tree properties from parse tree.
@@ -3100,34 +3099,30 @@ Return code as a string."
   "transcode the headline tree into a string according to the
 backend and return the string."
   (let* ((body (org-element-normalize-string
-		(or (org-export-data headline info) "")))
-	 (inner-template (if (plist-get info :multipage)
-                             (alist-get 'multipage-inner-template
-                                        (plist-get info :translate-alist))
-                           (alist-get 'inner-template
-                                        (plist-get info :translate-alist))))
+		(or (org-export-data headline info)
+                    "")))
+	 (inner-template (cdr (assq 'inner-template)
+                              (plist-get info :translate-alist)))
 	 (full-body (org-export-filter-apply-functions
 		     (plist-get info :filter-body)
 		     (if (not (functionp inner-template)) body
-                         (funcall inner-template body info))
+                       (funcall inner-template body info))
 		     info))
-	 (template (if (plist-get info :multipage)
-                       (cdr (assq 'multipage-template
-                                  (plist-get info :translate-alist)))
-                     (cdr (assq 'template
-                                  (plist-get info :translate-alist)))))
+	 (template (cdr (assq 'template
+                              (plist-get info :translate-alist))))
          (output
           (if (or (not (functionp template)) body-only) full-body
 	    (funcall template full-body info))))
     ;; Call citation export finalizer.
-    (setq output (org-cite-finalize-export output info))
-    ;; Remove all text properties since they cannot be
-    ;; retrieved from an external process.  Finally call
-    ;; final-output filter and return result.
-    (org-no-properties
-     (org-export-filter-apply-functions
-      (plist-get info :filter-final-output)
-      output info))))
+    (when (plist-get info :with-cite-processors)
+      (setq output (org-cite-finalize-export output info))
+      ;; Remove all text properties since they cannot be
+      ;; retrieved from an external process.  Finally call
+      ;; final-output filter and return result.
+      (org-no-properties
+       (org-export-filter-apply-functions
+        (plist-get info :filter-final-output)
+        output info)))))
 
 ;;;###autoload
 (defun org-export--annotate-info (backend info &optional subtreep visible-only ext-plist)
@@ -6389,7 +6384,7 @@ them."
      ("sv" :default "Illustration")
      ("tr" :default "Şekil")
      ("zh-CN" :html "&#22270;" :utf-8 "图"))
-    ("Fig. %s"
+p    ("Fig. %s"
      ("de" :default "Abb. %s"))
     ("Figure %d:"
      ("ar" :default "شكل %d:")

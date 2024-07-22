@@ -4,6 +4,8 @@
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;;      Jambunathan K <kjambunathan at gmail dot com>
+;;      multipage export support by Orm Finnendahl
+;;      <orm dot finnendahl at selma dot hfmdk-frankfurt dot de>
 ;; Maintainer: TEC <orgmode@tec.tecosaur.net>
 ;; Keywords: outlines, hypermedia, calendar, text
 
@@ -1172,7 +1174,7 @@ When exporting to HTML5, these values will be disregarded."
   :type '(plist :key-type (symbol :tag "Property")
 		:value-type (string :tag "Value")))
 
- (defcustom org-html-table-header-tags '("<th scope=\"%s\"%s>" . "</th>")
+(defcustom org-html-table-header-tags '("<th scope=\"%s\"%s>" . "</th>")
   "The opening and ending tags for table header fields.
 This is customizable so that alignment options can be specified.
 The first %s will be filled with the scope of the field, either row or col.
@@ -2217,12 +2219,10 @@ produce code that uses these same face definitions."
 Replaces invalid characters with \"_\"."
   (replace-regexp-in-string "[^a-zA-Z0-9_]" "_" kwd nil t))
 
-(defun org-html-footnote-section (info &optional data)
+(defun org-html-footnote-section (info)
   "Format the footnote section.
-INFO is a plist used as a communication channel. DATA is the
-toplevel headline of the current page in multipage export,
-otherwise the :parse-tree property of INFO will be used."
-  (pcase (org-export-collect-footnote-definitions info data)
+INFO is a plist used as a communication channel."
+  (pcase (org-export-collect-footnote-definitions info (plist-get info :tl-headline))
     (`nil nil)
     (definitions
       (format
@@ -5199,7 +5199,7 @@ holding export options."
    ;; Closing document.
    "</body>\n</html>"))
 
-(defun org-html-multipage-inner-template (contents info &optional data)
+(defun org-html-multipage-inner-template (contents info)
   "Return body of document string after HTML conversion.
 CONTENTS is the transcoded contents string.  INFO is a plist
 holding export options.
@@ -5219,7 +5219,7 @@ exported for multipage export.
              ;; Document contents.
              contents
              ;; Footnotes section.
-             (or (org-html-footnote-section info data) "")
+             (or (org-html-footnote-section info) "")
              ;; Postamble.
              (org-html--build-pre/postamble 'postamble info))
             (org-html-nav-right section-nav-lookup))))
