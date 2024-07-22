@@ -1,0 +1,63 @@
+CHANGELOG for the proposed multipage export support from ox and
+ox-html (22.07.2024, Orm Finnendahl)
+
+
+ox.el
+
+- added `org-export-collect-tree-info', and
+  org-export-transcode-headline, extracted from `org-export-as'
+
+- added :multipage case to `org-export-as', calling :process-multipage
+  callback submitted in info. In the multipage case, org-export-as
+  returns nil relying on :process-multipage to do the exporting, while
+  in the single page case it returns the transcoded string to the
+  caller from the backend.
+
+- changed `org-export-collect-footnote-definitions' to get its
+  numbering using `org-export-get-footnote-number' rather than always
+  counting from 1 as before. This should always work for single-page
+  and multipage export.
+
+- changed that `org-export-numbered-headline-p' always returns t for
+  headlines in the multipage case to ensure headline numbering is
+  collected.
+
+  NOTE: The single-page case will be handled like before, but it might
+  be a better idea to change the behaviour and do it the same way as
+  in the multipage case: Always collect the headline-numbering and
+  only decide at the transcoding stage whether the headline should be
+  numbered in the output.
+
+- Added "Chapter %s", "Fig. %s" and "Section %s" to
+  `org-export-dictionary'.
+
+ox-html.el
+
+- added `multipage-inner-template' and `multipage-template' to
+  `org-export-define-backend',
+
+- added :process-multipage to :filters-alist
+
+- added ?m / `org-export-to-multipage-html' to export-menu
+
+- added the following multipage export options and custom variables:
+
+  :html-multipage-head-include-default-style / org-html-multipage-head-include-default-style
+  :html-multipage-join-empty-bodies / org-html-multipage-join-empty-bodies
+  :html-multipage-export-directory / org-html-multipage-export-direcotry
+  :html-multipage-nav-format / org-multipage-nav-format
+  :html-multipage-split / org-multipage-split
+  :html-multipage-open / org-multipage-open
+  :html-multipage-nav-format / org-multipage-nav-format
+  :html-multipage-toc-to-top / org-html-multipage-toc-to-top
+
+- fixed :html-use-infojs to use org-export-html-use-infojs in
+  accordance with the org manual.
+
+- added customizable `org-html-multipage-style-default'
+
+- added the following functions:
+
+  `org-html--get-multipage-page-url'
+
+  `org-html--full-reference'
