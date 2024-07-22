@@ -33,6 +33,8 @@ ox.el
 
 ox-html.el
 
+- added authorship in header.
+
 - added `multipage-inner-template' and `multipage-template' to
   `org-export-define-backend',
 
@@ -86,8 +88,6 @@ ox-html.el
 
   `org-html-process-multipage'
 
-  `org-export--make-section-url-lookup'
-
   `org-html--generate-tl-url-lookup'
 
   `org-export--make-section-nav-lookup'
@@ -95,16 +95,6 @@ ox-html.el
   `org-html--make-multipage-toc-lookup'
 
   `org-export-get-multipage-tl-headline'
-
-  `org-export-get-multipage-headline-numbering'
-
-  `org-export-get-multipage-headline-number'
-
-  `org-export-get-multipage-tl-headline-numbering'
-
-  `org-export-get-multipage-tl-headline-number'
-
-  `org-export-link-name-to-headline-number'
 
   `org-element-get-top-level'
 
@@ -121,8 +111,6 @@ ox-html.el
   `write-string-to-file'
 
   `org-html-export-to-multipage-html'
-
-  `org-html--headline-number-to-page-url'
 
   `org-html--hidden-in-toc?'
 

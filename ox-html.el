@@ -4,7 +4,7 @@
 
 ;; Author: Carsten Dominik <carsten.dominik@gmail.com>
 ;;      Jambunathan K <kjambunathan at gmail dot com>
-;;      multipage export support by Orm Finnendahl
+;;      multipage export by Orm Finnendahl
 ;;      <orm dot finnendahl at selma dot hfmdk-frankfurt dot de>
 ;; Maintainer: TEC <orgmode@tec.tecosaur.net>
 ;; Keywords: outlines, hypermedia, calendar, text
@@ -4755,39 +4755,6 @@ INFO is the communication channel.
             ('browser (org-open-file (format "%s/%s" dir (car section-filenames))))
             ('buffer (find-file (format "%s/%s" dir (car section-filenames))))))))))
 
-(defun org-export--make-section-url-lookup (headline-numbering extension)
-  "Return an assoc-list containing entries for all headline-numbers
-with a plist containing title and url entries for the section and
-its navigation."
-  (let ((url-lookup
-         (cl-loop
-          for curr-entry on headline-numbering
-          for next = (cadr curr-entry)
-          for prev-title = nil then curr-title
-          for curr-title = (org-element-property :raw-value (caar curr-entry)) then next-title
-          for next-title = (org-element-property :raw-value (car next))
-          for prev-url = nil then curr-url
-          for curr-url = (string-prepend-section-numbering
-                          (string-to-backend-filename curr-title extension)
-                          (cdar curr-entry)
-                          org-export-headline-levels)
-          then next-url 
-          for next-url = (and next
-                              (string-prepend-section-numbering
-                               (string-to-backend-filename next-title extension)
-                               (cdr next)
-                               org-export-headline-levels))
-          collect (list (cdar curr-entry)
-                        :section-title curr-title :section-url curr-url
-                        :section-title-next next-title :section-url-next next-url
-                        :section-title-prev prev-title :section-url-prev prev-url))))
-    (dolist (lookup url-lookup)
-      (let ((up (cdr (assoc (butlast (car lookup)) url-lookup))))
-        (when up
-          (plist-put (cdr lookup) :section-up-title (plist-get up :section-title))
-          (plist-put (cdr lookup) :section-up-url (plist-get up :section-url)))))
-    url-lookup))
-
 (defun org-html--generate-tl-url-lookup (info)
   "Return an assoc list for all headlines appearing in the toc
 and the url names of the page they're on."
@@ -4865,51 +4832,6 @@ added to info (done in org-export--collect-tree-properties)."
       (setf elem parent)
       (setf parent (org-element-property :parent elem)))
     elem))
-
-(defun org-export-get-multipage-headline-numbering (element info)
-  "return the headline of the section containing
-element. This requires that :headline-numbering has already been
-added to info (done in org-export--collect-tree-properties)."
-  (let* ((elem element)
-         (parent (org-element-property :parent elem))
-         (hl-numbering (assoc elem (plist-get info :stripped-section-headline-numbering))))
-    (while (not hl-numbering)
-      (setf elem parent)
-      (setf parent (org-element-property :parent elem))
-      (setf hl-numbering (assoc elem (plist-get info :stripped-section-headline-numbering))))
-    hl-numbering))
-
-(defun org-export-get-multipage-headline-number (element info)
-  "return the headline-number of the section containing
-element. This requires that :headline-numbering has already been
-added to info (done in org-export--collect-tree-properties)."
-  (cdr (org-export-get-multipage-headline-numbering element info)))
-
-(defun org-export-get-multipage-tl-headline-numbering (element info)
-  "return the headline-numbering entry of the page containing
-element. This requires that :headline-numbering has already been
-added to info (done in org-export--collect-tree-properties)."
-  (assoc (org-export-get-multipage-tl-headline element info)
-         (plist-get info :stripped-section-headline-numbering)))
-
-(defun org-export-get-multipage-tl-headline-number (element info)
-  "return the headline-number of the page containing
-element. This requires that :headline-numbering has already been
-added to info (done in org-export--collect-tree-properties)."
-  (cdr (org-export-get-multipage-tl-headline-numbering element info)))
-
-(defun org-export-link-name-to-headline-number (name tree info)
-  "utility function to obtain the headline-numbering from a supplied
-link name in tree."
-  (org-export-get-multipage-headline-number
-   (org-export-resolve-fuzzy-link
-    (org-element-map tree 'link
-      (lambda (link)
-        (if (equal (org-element-property :path link) name)
-            link))
-      nil t)
-    info)
-   info))
 
 (defun org-element-get-top-level (element)
   "Return the top-level element of ELEMENT by traversing the parse
@@ -5030,15 +4952,6 @@ Return output directory's name."
                     :post-process post-process
                     :multipage t
                     ext-plist))))
-
-(defun org-html--headline-number-to-page-url (headline-number info)
-  "Return the url of the page HEADLINE-NUMBER is on."
-  (alist-get
-   (cdr
-    (assoc
-     headline-number
-     (plist-get global-info :tl-hl-lookup)))
-   (plist-get global-info :tl-url-lookup)))
 
 (defun org-html--hidden-in-toc? (headline-number tl-headline-number)
   "Check if the entry of HEADLINE-NUMBER should be hidden in the
