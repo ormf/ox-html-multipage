@@ -174,7 +174,6 @@
     (:html-multipage-nav-format nil nil org-html-multipage-nav-format)
     (:html-multipage-split nil "html-multipage-split" org-html-multipage-split)
     (:html-multipage-open nil "html-multipage-open" org-html-multipage-open)
-    (:html-multipage-nav-format nil nil org-html-multipage-nav-format)
     (:html-multipage-toc-to-top nil "html-multipage-toc-to-top" org-html-multipage-toc-to-top)
     (:html-postamble-format nil nil org-html-postamble-format)
     (:html-preamble-format nil nil org-html-preamble-format)

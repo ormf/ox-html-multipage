@@ -50,7 +50,6 @@ ox-html.el
   :html-multipage-nav-format / org-multipage-nav-format
   :html-multipage-split / org-multipage-split
   :html-multipage-open / org-multipage-open
-  :html-multipage-nav-format / org-multipage-nav-format
   :html-multipage-toc-to-top / org-html-multipage-toc-to-top
 
 - fixed :html-use-infojs to use org-export-html-use-infojs in
