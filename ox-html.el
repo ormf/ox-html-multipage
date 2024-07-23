@@ -3622,8 +3622,6 @@ INFO is a plist holding contextual information.  See
 	 (desc (org-string-nw-p desc))
 	 (path
 	  (cond
-	   ((member type '("http" "https" "ftp" "mailto" "news"))
-	    (url-encode-url (concat type ":" raw-path)))
 	   ((string= "file" type)
 	    ;; During publishing, turn absolute file names belonging
 	    ;; to base directory into relative file names.  Otherwise,
@@ -3637,7 +3635,7 @@ INFO is a plist holding contextual information.  See
 			     (org-trim (plist-get info :html-link-home)))))
 	      (when (and home
 			 (plist-get info :html-link-use-abs-url)
-			 (file-name-absolute-p raw-path))
+			 (not (file-name-absolute-p raw-path)))
 		(setq raw-path (concat (file-name-as-directory home) raw-path))))
 	    ;; Maybe turn ".org" into ".html".
 	    (setq raw-path (funcall link-org-files-as-html-maybe raw-path info))
@@ -3650,16 +3648,16 @@ INFO is a plist holding contextual information.  See
 		  (concat raw-path
 			  "#"
 			  (org-publish-resolve-external-link option path t))))))
-	   (t raw-path)))
+	   (t (url-encode-url (concat type ":" raw-path)))))
 	 (attributes-plist
 	  (org-combine-plists
 	   ;; Extract attributes from parent's paragraph.  HACK: Only
 	   ;; do this for the first link in parent (inner image link
 	   ;; for inline images).  This is needed as long as
 	   ;; attributes cannot be set on a per link basis.
-	   (let* ((parent (org-export-get-parent-element link))
-		  (link (let ((container (org-export-get-parent link)))
-			  (if (and (eq 'link (org-element-type container))
+	   (let* ((parent (org-element-parent-element link))
+		  (link (let ((container (org-element-parent link)))
+			  (if (and (org-element-type-p container 'link)
 				   (org-html-inline-image-p link info))
 			      container
 			    link))))
@@ -3694,12 +3692,12 @@ INFO is a plist holding contextual information.  See
      ;; appropriate referencing command.
      ((member type '("custom-id" "fuzzy" "id"))
       (let ((destination (if (string= type "fuzzy")
-                             (org-export-resolve-fuzzy-link link info)
+			     (org-export-resolve-fuzzy-link link info)
 			   (org-export-resolve-id-link link info))))
 	(pcase (org-element-type destination)
 	  ;; ID link points to an external file.
 	  (`plain-text
-	   (let ((fragment (concat "ID-" path))
+	   (let ((fragment (concat org-html--id-attr-prefix raw-path))
 		 ;; Treat links to ".org" files as ".html", if needed.
 		 (path (funcall link-org-files-as-html-maybe
 				destination info)))
@@ -3743,12 +3741,12 @@ INFO is a plist holding contextual information.  See
 		    (or desc
 			(org-export-data
 			 (org-element-property :title destination) info)))))
-             (format "<a href=\"%s\"%s>%s</a>" href attributes desc)))
+	     (format "<a href=\"%s\"%s>%s</a>" href attributes desc)))
 	  ;; Fuzzy link points to a target or an element.
 	  (_
            (if (and destination
                     (memq (plist-get info :with-latex) '(mathjax t))
-                    (eq 'latex-environment (org-element-type destination))
+                    (org-element-type-p destination 'latex-environment)
                     (eq 'math (org-latex--environment-type destination)))
                ;; Caption and labels are introduced within LaTeX
 	       ;; environment.  Use "ref" or "eqref" macro, depending on user
@@ -3759,14 +3757,14 @@ INFO is a plist holding contextual information.  See
                     (org-html-standalone-image-predicate
                      #'org-html--has-caption-p)
                     (counter-predicate
-                     (if (eq 'latex-environment (org-element-type destination))
+                     (if (org-element-type-p destination 'latex-environment)
                          #'org-html--math-environment-p
                        #'org-html--has-caption-p))
                     (numbered-ref
 		     (cond
 		      (desc nil)
 		      ((org-html-standalone-image-p destination info)
-                       (format (org-html--translate "Fig. %s" info)
+		       (format (org-html--translate "Fig. %s" info)
                                (org-export-get-ordinal
                                 (org-element-map destination 'link #'identity info t)
                                 info '(link) 'org-html-standalone-image-p)))
@@ -3782,15 +3780,15 @@ INFO is a plist holding contextual information.  See
      ;; Coderef: replace link with the reference name or the
      ;; equivalent line number.
      ((string= type "coderef")
-      (let ((fragment (concat "coderef-" (org-html-encode-plain-text path))))
+      (let ((fragment (concat "coderef-" (org-html-encode-plain-text raw-path))))
 	(format "<a href=\"#%s\" %s%s>%s</a>"
 		fragment
 		(format "class=\"coderef\" onmouseover=\"CodeHighlightOn(this, \
 '%s');\" onmouseout=\"CodeHighlightOff(this, '%s');\""
 			fragment fragment)
 		attributes
-		(format (org-export-get-coderef-format path desc)
-			(org-export-resolve-coderef path info)))))
+		(format (org-export-get-coderef-format raw-path desc)
+			(org-export-resolve-coderef raw-path info)))))
      ;; External link with a description part.
      ((and path desc)
       (format "<a href=\"%s\"%s>%s</a>"
@@ -4501,7 +4499,7 @@ required."
   "Return the url of the page containing ELEMENT."
   (alist-get
    (org-export-get-multipage-tl-headline element info)
-   (plist-get global-info :tl-url-lookup)))
+   (plist-get info :tl-url-lookup)))
 
 (defun org-html--full-reference (destination info &optional page-only)
   "Return an appropriate reference for DESTINATION. Like
@@ -4611,7 +4609,7 @@ used as a communication channel."
 (defun org-html-multipage-ensure-export-dir (info)
   "get the full pathname of `html-multipage-export-directory'
 and ensure it exists."
-  (let ((dir (plist-get global-info :html-multipage-export-directory)))
+  (let ((dir (plist-get info :html-multipage-export-directory)))
     (when (symbolp dir) (setq dir (format "%s" dir)))
     (unless (= (aref dir 0) 47)
       (setq dir (concat (file-name-directory (buffer-file-name)) dir)))
@@ -4715,16 +4713,14 @@ INFO is the communication channel.
                       (cl-mapcar 'cons
                                  (mapcar 'car headline-numbering)
                                  (mapcar 'car stripped-section-headline-numbering))))
-          (setq global-info info) ;;; for debugging purposes, remove later
           (plist-put info :multipage-toc-lookup (org-html--make-multipage-toc-lookup info))
           (plist-put info :html-top-url
                      (alist-get
                       (car (plist-get info :section-trees))
-                      (plist-get global-info :tl-url-lookup)))
+                      (plist-get info :tl-url-lookup)))
           (plist-put info :html-top-title
                      (org-element-title
                       (car (plist-get info :section-trees))))
-          (setq global-info info) ;;; for debugging purposes, remove later
           (cl-loop
            for file in section-filenames
            for tl-headline in section-trees
@@ -4788,7 +4784,7 @@ section and its navigation."
                                 (org-html--full-reference hl info t)
                                 (org-element-title up)
                                 (and up (org-html--full-reference up info t)))))
-                      (plist-get global-info :section-trees))))
+                      (plist-get info :section-trees))))
     ;;; collect the info for prev, curr, next and up navigation for
     ;;; each page by cdr-ing over nav.
     (cl-labels ((inner (prev-entry curr-entry)
