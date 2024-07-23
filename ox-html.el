@@ -161,6 +161,7 @@
     (:html-infojs-template nil nil org-html-infojs-template)
     (:html-inline-image-rules nil nil org-html-inline-image-rules)
     (:html-link-org-files-as-html nil nil org-html-link-org-files-as-html)
+    (:html-numbered-link-format nil nil org-html-numbered-link-format)
     (:html-mathjax-options nil nil org-html-mathjax-options)
     (:html-mathjax-template nil nil org-html-mathjax-template)
     (:html-metadata-timestamp-format nil nil org-html-metadata-timestamp-format)
@@ -1089,6 +1090,21 @@ Links to \"file.org.gpg\" are also converted.
 When nil, the links still point to the plain \".org\" file."
   :group 'org-export-html
   :type 'boolean)
+
+(defcustom org-html-numbered-link-format
+  '("Chapter %s"
+    "Section %s"
+    "Fig. %s")
+  "Format for the labels of numbered links.
+
+ The first string is used for links to Chapters, the second for
+links to Sections and the third for links to Figures. %s will be
+replaced by the number of the reference. The strings get
+translated using org-html--translate."
+  :group 'org-export-html
+  :version "29.4"
+  :package-version '(Org . "9.8")
+  :type 'list)
 
 ;;;; Links :: Inline images
 
@@ -3728,11 +3744,11 @@ INFO is a plist holding contextual information.  See
                                               destination info)))
                         (if (> (length headline-number) 1)
                             (format
-                             (org-html--translate "Section %s" info)
+                             (org-html--translate (nth 1 org-html-numbered-link-format) info)
                              (mapconcat #'number-to-string
                                         headline-number "."))
                             (format
-                             (org-html--translate "Chapter %s" info)
+                             (org-html--translate (nth 0 org-html-numbered-link-format) info)
                              (mapconcat #'number-to-string
                                         headline-number "."))))
 		    ;; Case 2: Either the headline is un-numbered or
@@ -3764,7 +3780,7 @@ INFO is a plist holding contextual information.  See
 		     (cond
 		      (desc nil)
 		      ((org-html-standalone-image-p destination info)
-		       (format (org-html--translate "Fig. %s" info)
+		       (format (org-html--translate (nth 2 org-html-numbered-link-format) info)
                                (org-export-get-ordinal
                                 (org-element-map destination 'link #'identity info t)
                                 info '(link) 'org-html-standalone-image-p)))
