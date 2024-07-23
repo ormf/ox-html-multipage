@@ -1,6 +1,5 @@
 CHANGELOG for the proposed multipage export support from ox and
-ox-html (22.07.2024, Orm Finnendahl)
-
+ox-html (23.07.2024, Orm Finnendahl)
 
 ox.el
 
@@ -44,6 +43,7 @@ ox-html.el
 
 - added the following multipage export options and custom variables:
 
+  :html-numbered-link-format / org-html-numbered-link-format
   :html-multipage-head-include-default-style / org-html-multipage-head-include-default-style
   :html-multipage-join-empty-bodies / org-html-multipage-join-empty-bodies
   :html-multipage-export-directory / org-html-multipage-export-direcotry
@@ -57,6 +57,30 @@ ox-html.el
   accordance with the org manual.
 
 - added customizable `org-html-multipage-style-default'
+
+- added multipage switches in
+
+  `org-html--build-head'
+
+- changed signature of toc-entries used in `org-html--toc-text' to
+  contain a "toc-hidden" attribute (used by multipage-output, ignored
+  in single-page-output).
+
+- changed `org-html--reference' to `org-html--full-reference' call in
+
+  `org-html-list-of-listings'
+
+  `org-html-list-of-tables'
+
+  `org-html-target'
+
+- changed multipage switch for numberedp in `org-html-headline'
+
+- added multipage switch to generate a full toc for inline TOC in
+  `org-html-keyword'
+
+- reorganized `org-html-link' for multipage support and
+  :html-numbered-link-format.
 
 - added the following functions:
 
@@ -127,26 +151,4 @@ ox-html.el
   `org-html-multipage-template'
 
   `org-html-multipage-inner-template'
-
-- added multipage switches in
-
-  `org-html--build-head'
-
-- changed signature of toc-entries used in `org-html--toc-text' to
-  contain a "toc-hidden" attribute (used by multipage-output, ignored
-  in single-page-output).
-
-- changed `org-html--reference' to `org-html--full-reference' call in
-
-  `org-html-list-of-listings'
-
-  `org-html-list-of-tables'
-
-  `org-html-target'
-
-- changed multipage switch for numberedp in `org-html-headline'
-
-- added multipage switch to generate a full toc for inline TOC in
-  `org-html-keyword'
-
-- 
+  

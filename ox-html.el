@@ -2851,8 +2851,6 @@ of contents as a string, or nil if it is empty."
 		    toc
 		    (format "</%s>\n" outer-tag))))))))
 
-
-
 (defun org-html--toc-text (toc-entries)
   "Return innards of a table of contents, as a string.
 TOC-ENTRIES is an alist where key is an entry title, as a string,
@@ -4361,7 +4359,6 @@ CONTENTS is the exported HTML code.  INFO is the info plist."
     (when (plist-get info :html-indent)
       (indent-region (point-min) (point-max)))
     (buffer-substring-no-properties (point-min) (point-max))))
-
 
 
 ;;; End-user functions
