@@ -3,8 +3,7 @@ ox-html (23.07.2024, Orm Finnendahl)
 
 ox.el
 
-- added `org-export-collect-tree-info', and
-  org-export-transcode-headline, extracted from `org-export-as'
+- added org-export-transcode-page, extracted from `org-export-as'
 
 - added :multipage case to `org-export-as', calling :process-multipage
   callback submitted in info. In the multipage case, org-export-as
