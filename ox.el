@@ -2928,71 +2928,6 @@ returned by the function."
       info nil nil 'with-affiliated)))
 
 ;;;###autoload
-(defun org-export--collect-tree-info
-    (backend &optional subtreep visible-only body-only ext-plist)
-  "Parse current Org Buffer into a tree suitable for final
-processing for the BACKEND and store it in the :parse-tree
-property of info along with additional entries like
-:headline-numbering and :id-alist. Return info.
-
-BACKEND is either an export back-end, as returned by, e.g.,
-`org-export-create-backend', or a symbol referring to
-a registered back-end.
-
-If narrowing is active in the current buffer, only transcode its
-narrowed part.
-
-If a region is active, transcode that region.
-
-When optional argument SUBTREEP is non-nil, transcode the
-sub-tree at point, extracting information from the headline
-properties first.
-
-When optional argument VISIBLE-ONLY is non-nil, don't export
-contents of hidden elements.
-
-When optional argument BODY-ONLY is non-nil, only return body
-code, without surrounding template.
-
-Optional argument EXT-PLIST, when provided, is a property list
-with external parameters overriding Org default settings, but
-still inferior to file-local settings.
-
-Return info for further processing."
-  (when (symbolp backend) (setq backend (org-export-get-backend backend)))
-  (org-export-barf-if-invalid-backend backend)
-  (org-fold-core-ignore-modifications
-    (save-excursion
-      (save-restriction
-        ;; Narrow buffer to an appropriate region or subtree for
-        ;; parsing.  If parsing subtree, be sure to remove main
-        ;; headline, planning data and property drawer.
-        (cond ((org-region-active-p)
-	       (narrow-to-region (region-beginning) (region-end)))
-	      (subtreep
-	       (org-narrow-to-subtree)
-	       (goto-char (point-min))
-	       (org-end-of-meta-data)
-               ;; Make the region include top heading in the subtree.
-               ;; This way, we will be able to retrieve its export
-               ;; options when calling
-               ;; `org-export--get-subtree-options'.
-               (when (bolp) (backward-char))
-	       (narrow-to-region (point) (point-max))))
-        ;; Initialize communication channel with original buffer
-        ;; attributes, unavailable in its copy.
-        (let* ((org-export-current-backend (org-export-backend-name backend))
-	       (info (org-combine-plists
-		      (org-export--get-export-attributes
-		       backend subtreep visible-only body-only)
-		      (org-export--get-buffer-attributes))))
-	  ;; Update communication channel and get parse tree.
-          ;; Buffer isn't parsed directly.  Instead, all buffer
-	  ;; modifications and consequent parsing are undertaken in a
-	  ;; temporary copy.
-          info)))))
-
-;;;###autoload
 (defun org-export-singlepage (info body-only)
   (let* ((body (org-element-normalize-string
                 (or (org-export-data (plist-get info :parse-tree) info)
@@ -3093,9 +3028,9 @@ Return code as a string."
                         body-only)
              ;; Eventually transcode TREE.  Wrap the resulting string into
              ;; a template.
-             (org-export-transcode-headline (plist-get info :parse-tree) info body-only))))))))
+             (org-export-transcode-page (plist-get info :parse-tree) info body-only))))))))
 
-(defun org-export-transcode-headline (headline info &optional body-only)
+(defun org-export-transcode-page (headline info &optional body-only)
   "transcode the headline tree into a string according to the
 backend and return the string."
   (let* ((body (org-element-normalize-string
