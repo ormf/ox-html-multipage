@@ -5099,6 +5099,13 @@ holding export options."
              (nth 1 div)
              (nth 2 div)
              (plist-get info :html-content-class)))
+;;    "<div id=\"search\"></div>
+;; <script>
+;;     window.addEventListener('DOMContentLoaded', (event) => {
+;;         new PagefindUI({ element: \"#search\", showSubResults: true });
+;;     });
+;; </script>
+;; "
    ;; Table of contents.
    (let ((depth (plist-get info :with-toc)))
      (when depth (org-html-multipage-toc depth info)))
