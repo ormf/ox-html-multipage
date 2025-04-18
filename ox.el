@@ -185,7 +185,9 @@ All these properties should be backend agnostic.  Backend
 specific properties are set through `org-export-define-backend'.
 Properties redefined there have precedence over these.")
 
-(defvar org-export-filters-alist
+;;; mechanism to allow re/overloading of ox.el
+(defvar org-export-filters-alist)
+(setq org-export-filters-alist
   '((:filter-body . org-export-filter-body-functions)
     (:filter-bold . org-export-filter-bold-functions)
     (:filter-babel-call . org-export-filter-babel-call-functions)
@@ -215,6 +217,7 @@ Properties redefined there have precedence over these.")
     (:filter-latex-fragment . org-export-filter-latex-fragment-functions)
     (:filter-line-break . org-export-filter-line-break-functions)
     (:filter-link . org-export-filter-link-functions)
+    (:filter-multipage . org-export-filter-multipage-functions)
     (:filter-node-property . org-export-filter-node-property-functions)
     (:filter-options . org-export-filter-options-functions)
     (:filter-paragraph . org-export-filter-paragraph-functions)
@@ -240,17 +243,18 @@ Properties redefined there have precedence over these.")
     (:filter-underline . org-export-filter-underline-functions)
     (:filter-verbatim . org-export-filter-verbatim-functions)
     (:filter-verse-block . org-export-filter-verse-block-functions))
-  "Alist between filters properties and initial values.
-
-The key of each association is a property name accessible through
-the communication channel.  Its value is a configurable global
-variable defining initial filters.
-
-This list is meant to install user specified filters.  Backend
-developers may install their own filters using
-`org-export-define-backend'.  Filters defined there will always
-be prepended to the current list, so they always get applied
-first.")
+;;   "Alist between filters properties and initial values.
+;; 
+;; The key of each association is a property name accessible through
+;; the communication channel.  Its value is a configurable global
+;; variable defining initial filters.
+;; 
+;; This list is meant to install user specified filters.  Backend
+;; developers may install their own filters using
+;; `org-export-define-backend'.  Filters defined there will always
+;; be prepended to the current list, so they always get applied
+;; first."
+  )
 
 (defconst org-export-default-inline-image-rule
   `(("file" .
@@ -860,6 +864,14 @@ This option can also be set with the OPTIONS keyword, e.g.,
   :package-version '(Org . "9.7")
   :type 'boolean)
 
+(defcustom org-export-replace-macros t
+  "When non-nil, replace macros before export.
+This variable does not affect {{{results}}} macros when processing
+code block results."
+  :group 'org-export-general
+  :package-version '(Org . "9.8")
+  :type 'boolean)
+
 (defcustom org-export-snippet-translation-alist nil
   "Alist between export snippets backends and exporter backends.
 
@@ -884,7 +896,7 @@ HTML code while every other backend will ignore it."
 	       (cl-every #'stringp (mapcar #'car x))
 	       (cl-every #'stringp (mapcar #'cdr x)))))
 
-(defcustom org-export-global-macros nil
+(defcustom org-export-global-org-modemacros nil
   "Alist between macro names and expansion templates.
 
 This variable defines macro expansion templates available
@@ -1127,7 +1139,7 @@ Return nil if BACKEND is unknown."
     (let ((options (org-export-backend-options backend))
 	  parent)
       (while (setq parent (org-export-backend-parent backend))
-	(setq backend (org-export-get-backend parent))
+	(setq backend (if (symbolp parent) (org-export-get-backend parent) parent))
 	(setq options (append options (org-export-backend-options backend))))
       options)))
 
@@ -1145,7 +1157,7 @@ returns filters inherited from parent backends, if any."
     (let ((filters (org-export-backend-filters backend))
 	  parent)
       (while (setq parent (org-export-backend-parent backend))
-	(setq backend (org-export-get-backend parent))
+	(setq backend (if (symbolp parent) (org-export-get-backend parent) parent))
 	(setq filters (append filters (org-export-backend-filters backend))))
       filters)))
 
@@ -1621,8 +1633,17 @@ an alist where associations are (VARIABLE-NAME VALUE)."
 
 ;;;; Tree Properties
 ;;
-;; Tree properties used for transcoding are collected before
-;; transcoding with `org-export--collect-tree-properties'.
+;; Tree properties are information extracted from parse tree.  They
+;; are initialized at the beginning of the transcoding process by
+;; `org-export--collect-tree-properties'.
+;;
+;; Dedicated functions focus on computing the value of specific tree
+;; properties during initialization.  Thus, `org-export--prune-tree'
+;; lists elements and objects that should be skipped during export,
+;; `org-export--get-min-level' gets the minimal exportable level, used
+;; as a basis to compute relative level for headlines.  Eventually
+;; `org-export--collect-headline-numbering' builds an alist between
+;; headlines and their numbering.
 
 (defun org-export--collect-tree-properties (data info)
   "Extract tree properties from parse tree.
@@ -1665,14 +1686,6 @@ Return updated plist."
 		  (let* ((id (org-element-property :path l))
 			 (file (car (org-id-find id))))
 		    (and file (cons id (file-relative-name file))))))))))
-
-;; Dedicated functions focus on computing the value of specific tree
-;; properties during initialization.  Thus, `org-export--prune-tree'
-;; lists elements and objects that should be skipped during export,
-;; `org-export--get-min-level' gets the minimal exportable level, used
-;; as a basis to compute relative level for headlines.  Eventually
-;; `org-export--collect-headline-numbering' builds an alist between
-;; headlines and their numbering.
 
 (defun org-export--get-min-level (data options)
   "Return minimum exportable headline's level in DATA.
@@ -1874,9 +1887,12 @@ not exported."
 INFO is a plist containing export directives."
   (let ((type (org-element-type blob)))
     ;; Return contents only for complete parse trees.
-    (if (eq type 'org-data) (lambda (_datum contents _info) contents)
-      (let ((transcoder (cdr (assq type (plist-get info :translate-alist)))))
-	(and (functionp transcoder) transcoder)))))
+    (let ((transcoder (cdr (assq type (plist-get info :translate-alist)))))
+      (cond
+       ((functionp transcoder) transcoder)
+       ;; Use default org-data transcoder unless specified.
+       ((eq type 'org-page) #'org-export-transcode-org-page)
+       ((eq type 'org-data) #'org-export-transcode-org-data)))))
 
 (defun org-export--keep-spaces (data info)
   "Non-nil, when post-blank spaces after removing DATA should be preserved.
@@ -1919,7 +1935,7 @@ string.  INFO is a plist holding export options.
 
 The `:filter-parse-tree' filters are not applied.
 
-Return a string."
+Return a string or a list of strings."
   (or (gethash data (plist-get info :exported-data))
       ;; Handle broken links according to
       ;; `org-export-with-broken-links'.
@@ -1930,7 +1946,7 @@ Return a string."
 		 (progn ,@body)
 	       (org-link-broken
 		(pcase (plist-get info :with-broken-links)
-		  (`nil (user-error "Org export aborted. Unable to resolve link: %S\nSee `org-export-with-broken-links'." (nth 1 err)))
+		  (`nil (user-error "Org export aborted.  Unable to resolve link: %S\nSee `org-export-with-broken-links'" (nth 1 err)))
 		  (`mark (org-export-data
 			  (format "[BROKEN LINK: %s]" (nth 1 err)) info))
 		  (_ nil))))))
@@ -1965,7 +1981,12 @@ Return a string."
 			     (broken-link-handler
 			      (funcall transcoder data nil info))
                            (funcall transcoder data nil info)))))
-		 ;; Element/Object with contents.
+                 ((and (eq (org-element-type data) 'org-data)
+                       (plist-get info :multipage))
+                  (mapcar (lambda (org-page)
+                            (org-export-data org-page info))
+                          (org-element-contents data)))
+                 ;; Element/Object with contents.
 		 (t
 		  (let ((transcoder (org-export-transcoder data info)))
 		    (when transcoder
@@ -2003,22 +2024,22 @@ Return a string."
 				  info)))))))))
 	  ;; Final result will be memoized before being returned.
 	  (puthash
-	   data
-	   (cond
-	    ((not results) (or (org-export--keep-spaces data info) ""))
+           data
+           (cond
+            ((not results) (or (org-export--keep-spaces data info) ""))
             ((memq type '(nil org-data plain-text raw)) results)
-	    ;; Append the same white space between elements or objects
-	    ;; as in the original buffer, and call appropriate filters.
-	    (t
-	     (org-export-filter-apply-functions
-	      (plist-get info (intern (format ":filter-%s" type)))
-	      (let ((blank (or (org-element-post-blank data) 0)))
-		(if (eq (org-element-class data parent) 'object)
-		    (concat results (make-string blank ?\s))
-		  (concat (org-element-normalize-string results)
-			  (make-string blank ?\n))))
-	      info)))
-	   (plist-get info :exported-data))))))
+            ;; Append the same white space between elements or objects
+            ;; as in the original buffer, and call appropriate filters.
+            (t
+             (org-export-filter-apply-functions
+              (plist-get info (intern (format ":filter-%s" type)))
+              (let ((blank (or (org-element-post-blank data) 0)))
+                (if (eq (org-element-class data parent) 'object)
+                    (concat results (make-string blank ?\s))
+                  (concat (org-element-normalize-string results)
+                          (make-string blank ?\n))))
+              info)))
+           (plist-get info :exported-data))))))
 
 (defun org-export-data-with-backend (data backend info)
   "Convert DATA into BACKEND format.
@@ -2185,6 +2206,15 @@ string, the backend, as a symbol, and the communication channel,
 as a plist.  It must return a string that will be used as the
 final export output.")
 
+(defvar org-export-filter-multipage-functions nil
+  "List of functions applied to the parse tree.
+The functions are applied only, when multipage output is
+requested.  They are called after the parse tree has been split
+for multipage output.  Each function is called with three
+arguments:  The parse tree, as returned by
+`org-element-parse-buffer', the backend, as a symbol, and the
+communication channel, as a plist.  It must return the modified
+parse tree to transcode.")
 
 ;;;; Elements Filters
 
@@ -2928,34 +2958,6 @@ returned by the function."
       info nil nil 'with-affiliated)))
 
 ;;;###autoload
-(defun org-export-singlepage (info body-only)
-  (let* ((body (org-element-normalize-string
-                (or (org-export-data (plist-get info :parse-tree) info)
-                    "")))
-         (inner-template (cdr (assq 'inner-template
-                                    (plist-get info :translate-alist))))
-         (full-body (org-export-filter-apply-functions
-                     (plist-get info :filter-body)
-                     (if (not (functionp inner-template)) body
-                       (funcall inner-template body info))
-                     info))
-         (template (cdr (assq 'template
-                              (plist-get info :translate-alist))))
-         (output
-          (if (or (not (functionp template)) body-only) full-body
-            (funcall template full-body info))))
-    ;; Call citation export finalizer.
-    (when (plist-get info :with-cite-processors)
-      (setq output (org-cite-finalize-export output info)))
-    ;; Remove all text properties since they cannot be
-    ;; retrieved from an external process.  Finally call
-    ;; final-output filter and return result.
-    (org-no-properties
-     (org-export-filter-apply-functions
-      (plist-get info :filter-final-output)
-      output info))))
-
-;;;###autoload
 (defun org-export-as
     (backend &optional subtreep visible-only body-only ext-plist)
   "Transcode current Org buffer into BACKEND code.
@@ -2986,7 +2988,9 @@ Optional argument EXT-PLIST, when provided, is a property list
 with external parameters overriding Org default settings, but
 still inferior to file-local settings.
 
-Return code as a string."
+Return code as a string or a list of strings.
+The returned strings will have their `org-export-info' property set to
+export information channel."
   (when (symbolp backend) (setq backend (org-export-get-backend backend)))
   (org-export-barf-if-invalid-backend backend)
   (org-fold-core-ignore-modifications
@@ -3022,48 +3026,104 @@ Return code as a string."
            (setq info (org-export--annotate-info
                        backend info subtreep visible-only ext-plist))
            (setq global-info info)
-           (if (plist-get info :multipage)
-               (funcall (car (plist-get info :process-multipage))
-                        info
-                        body-only)
-             ;; Eventually transcode TREE.  Wrap the resulting string into
-             ;; a template.
-             (org-export-transcode-page (plist-get info :parse-tree) info body-only))))))))
+           (setq gtest2 (plist-get :filter-multipage info))
+           (setq gtest org-export-filter-multipage-functions)
+	   ;; Eventually transcode TREE.  Wrap the resulting string into
+	   ;; a template.
+	   (let ((output
+                  (or (org-export-data (plist-get info :parse-tree) info)
+                      "")))
+             (setq output (ensure-list output))
+             ;; Call citation export finalizer.
+             (when (plist-get info :with-cite-processors)
+               (setq output
+                     (mapcar
+                      (lambda (o) (org-cite-finalize-export o info))
+                      output)))
+             (let ((filters (plist-get info :filter-final-output)))
+               ;; Call final-output filter and return result.
+               (setq output
+                     (mapcar
+                      (lambda (o) (org-export-filter-apply-functions filters o info))
+                      output)))
+             ;; Apply org-export-info property.
+             (setq output
+                   (mapcar
+                    (lambda (o) (org-add-props o nil
+                             :output-file (get-text-property 0 :output-file o)
+                             'org-export-info info))
+                    output))
+             (if (length= output 1) (car output) output))))))))
 
-(defun org-export-transcode-page (headline info &optional body-only)
-  "transcode the headline tree into a string according to the
-backend and return the string."
-  (let* ((body (org-element-normalize-string
-		(or (org-export-data headline info) "")))
-	 (inner-template (if (plist-get info :multipage)
-                             (alist-get 'multipage-inner-template
-                                        (plist-get info :translate-alist))
-                           (alist-get 'inner-template
+(defun org-export-transcode-org-page (org-page contents info)
+  "Transcode ORG-PAGE into a string according to the backend.
+
+ORG-PAGE is a pseudo element containing the parse tree of one
+page with (optional) additional page specific properties.
+
+CONTENTS are the transcoded contents of the page as a string.
+
+INFO is used as communication channel."
+  (let ((headline (car (org-element-map org-page 'headline 'identity t))))
+    (message "transcoding %s" (org-html-element-title headline))
+    (let* ((body-only (org-element-property :body-only org-page))
+           (info (cl-list* ;; add :tl-headline and :tl-headline-number to info
+                  :tl-headline headline
+                  :tl-headline-number
+                  (alist-get
+                   headline
+                   (plist-get info :headline-numbering))
+                  info))
+           (body (org-element-normalize-string
+                  (or contents "")))
+           (inner-template (if (plist-get info :multipage)
+                               (alist-get 'multipage-inner-template
+                                          (plist-get info :translate-alist))
+                             (alist-get 'inner-template
                                         (plist-get info :translate-alist))))
-	 (full-body (org-export-filter-apply-functions
-		     (plist-get info :filter-body)
-		     (if (not (functionp inner-template)) body
+           (full-body (org-export-filter-apply-functions
+                       (plist-get info :filter-body)
+                       (if (not (functionp inner-template)) body
                          (funcall inner-template body info))
-		     info))
-	 (template (if (plist-get info :multipage)
-                       (cdr (assq 'multipage-template
-                                  (plist-get info :translate-alist)))
-                     (cdr (assq 'template
+                       info))
+           (template (if (plist-get info :multipage)
+                         (cdr (assq 'multipage-template
+                                    (plist-get info :translate-alist)))
+                       (cdr (assq 'template
                                   (plist-get info :translate-alist)))))
-         (output
-          (if (or (not (functionp template)) body-only) full-body
-	    (funcall template full-body info))))
-    ;; Call citation export finalizer.
-    (setq output (org-cite-finalize-export output info))
-    ;; Remove all text properties since they cannot be
-    ;; retrieved from an external process.  Finally call
-    ;; final-output filter and return result.
-    (org-no-properties
-     (org-export-filter-apply-functions
-      (plist-get info :filter-final-output)
-      output info))))
+           (output
+            (if (or (not (functionp template)) body-only) full-body
+              (funcall template full-body info))))
+      ;; Call citation export finalizer.
+      (setq output (org-cite-finalize-export output info))
+      ;; Remove all text properties since they cannot be
+      ;; retrieved from an external process.  Finally call
+      ;; final-output filter and return result.
+      (let ((final-output (org-no-properties
+                           (org-export-filter-apply-functions
+                            (plist-get info :filter-final-output)
+                            output info))))
+        (put-text-property
+         0 1 :output-file (org-element-property :output-file org-page) final-output)
+        final-output))))
 
-;;;###autoload
+(defun org-export-transcode-org-data (data body info)
+  "Transcode DATA with BODY.  Return transcoded string.
+DATA is the top `org-data' node of the parse-tree.  INFO is the
+communication channel plist."
+  (let* ((inner-template (cdr (assq 'inner-template
+                                    (plist-get info :translate-alist))))
+         (full-body (org-export-filter-apply-functions
+                     (plist-get info :filter-body)
+                     (if (not (functionp inner-template)) body
+                       (funcall inner-template body info))
+                     info))
+         (template (cdr (assq 'template
+                              (plist-get info :translate-alist))))
+         (body-only (memq 'body-only (plist-get info :export-options))))
+    (if (or (not (functionp template)) body-only) full-body
+      (funcall template full-body info))))
+
 (defun org-export--annotate-info (backend info &optional subtreep visible-only ext-plist)
   "Annotate the INFO plist according to the BACKEND.
 
@@ -3090,8 +3150,9 @@ still inferior to file-local settings."
                         (org-export-backend-name backend))
     (org-export-expand-include-keyword nil nil nil nil (plist-get info :expand-links))
     (org-export--delete-comment-trees)
-    (org-macro-initialize-templates org-export-global-macros)
-    (org-macro-replace-all org-macro-templates parsed-keywords)
+    (when org-export-replace-macros
+      (org-macro-initialize-templates org-export-global-org-modemacros)
+      (org-macro-replace-all org-macro-templates parsed-keywords))
     ;; Refresh buffer properties and radio targets after previous
     ;; potentially invasive changes.
     (org-set-regexps-and-options)
@@ -3140,6 +3201,7 @@ still inferior to file-local settings."
         (_ nil)))
     ;; Install user's and developer's filters.
     (setq info (org-export-install-filters info))
+
     ;; Call options filters and update export options.  We do not
     ;; use `org-export-filter-apply-functions' here since the
     ;; arity of such filters is different.
@@ -3148,6 +3210,7 @@ still inferior to file-local settings."
         (let ((result (funcall filter info backend-name)))
           (when result (setq info result)))))
     ;; Parse buffer.
+
     (setq tree (org-element-parse-buffer nil visible-only 'defer))
     ;; Prune tree from non-exported elements and transform
     ;; uninterpreted elements or objects in both parse tree and
@@ -3164,6 +3227,17 @@ still inferior to file-local settings."
     ;; to communication channel.  This is responsible for setting
     ;; :parse-tree to TREE.
     (setq info (org-export--collect-tree-properties tree info))
+    ;; In case of multipage output call the multipage split function
+    ;; and multipage filter functions to return the multipage
+    ;; parse-tree.
+    (when (plist-get info :multipage)
+      (setq tree (org-export-filter-apply-functions
+                  (plist-get info :filter-multipage)
+                  (funcall
+                   (cdr (assq 'multipage-split-function
+                              (plist-get info :translate-alist)))
+                   tree info)
+                  info)))
     ;; Process citations and bibliography.  Replace each citation
     ;; and "print_bibliography" keyword in the parse tree with
     ;; the output of the selected citation export processor.
@@ -3917,7 +3991,6 @@ applied."
      (or (cdr (assoc backend org-export-snippet-translation-alist))
 	 backend))))
 
-
 ;;;; For Footnotes
 ;;
 ;; `org-export-collect-footnote-definitions' is a tool to list
@@ -4032,14 +4105,14 @@ when references are found in footnote definitions.
 
 Definitions either appear as Org data or as a secondary string
 for inlined footnotes.  Unreferenced definitions are ignored."
-  (let (labels alist)
+  (let ((n 0) labels alist)
     (org-export--footnote-reference-map
      (lambda (f)
        ;; Collect footnote number, label and definition.
        (let ((l (org-element-property :label f)))
 	 (unless (and l (member l labels))
-	   (let ((n (org-export-get-footnote-number f info)))
-             (push (list n l (org-export-get-footnote-definition f info)) alist)))
+	   (cl-incf n)
+	   (push (list n l (org-export-get-footnote-definition f info)) alist))
 	 (when l (push l labels))))
      (or data (plist-get info :parse-tree)) info body-first)
     (nreverse alist)))
@@ -4156,8 +4229,7 @@ INFO is a plist holding contextual information."
   "Return a non-nil value if HEADLINE element should be numbered.
 INFO is a plist used as a communication channel."
   (unless (org-not-nil (org-export-get-node-property :UNNUMBERED headline t))
-    (let ((sec-num (or (plist-get info :section-numbers)
-                       (plist-get info :multipage)))
+    (let ((sec-num (plist-get info :section-numbers))
 	  (level (org-export-get-relative-level headline info)))
       (if (wholenump sec-num) (<= level sec-num) sec-num))))
 
@@ -4669,7 +4741,7 @@ Return value can be an object or an element:
 		   fullname)))))
 
 (defun org-export-link-remote-p (link)
-  "Returns non-nil if the link refers to a remote resource."
+  "Return non-nil if LINK refers to a remote resource."
   (or (member (org-element-property :type link) '("http" "https" "ftp"))
       (and (string= (org-element-property :type link) "file")
            (file-remote-p (org-element-property :path link)))))
@@ -6323,7 +6395,7 @@ them."
      ("sv" :default "Illustration")
      ("tr" :default "Şekil")
      ("zh-CN" :html "&#22270;" :utf-8 "图"))
-p    ("Fig. %s"
+    ("Fig. %s"
      ("de" :default "Abb. %s"))
     ("Figure %d:"
      ("ar" :default "شكل %d:")
@@ -6636,7 +6708,7 @@ p    ("Fig. %s"
      ("ca" :html "&Iacute;ndex")
      ("cs" :default "Obsah")
      ("da" :default "Indhold")
-     ("de" :default "Inhaltsverzeichnis")
+     ("de" :default "Inhalt")
      ("eo" :default "Enhavo")
      ("es" :ascii "Indice" :html "&Iacute;ndice" :default "Índice")
      ("et" :default "Sisukord")
@@ -6891,6 +6963,32 @@ This function returns BUFFER."
 	(switch-to-buffer-other-window buffer))
       buffer)))
 
+(defun org-export--write-output (output encoding)
+  "Write OUTPUT to file with ENCODING.
+OUTPUT may be a string or a list of strings.
+The target file is retrieved from :output-file OUTPUT property or
+:output-file property in plist stored in `org-export-info' property of
+each string.
+
+Return the file name or a list of file names."
+  (if (listp output) (mapcar #'org-export--write-output output)
+    (setq tmp-debug output)
+    (let ((file (or
+                 (get-text-property 0 :output-file output)
+                 (plist-get
+                  (get-text-property 0 'org-export-info output)
+                  :output-file))))
+      (with-temp-buffer
+        (insert output)
+        ;; Ensure final newline.  This is what was done
+        ;; historically, when we used `write-file'.
+        ;; Note that adding a newline is only safe for
+        ;; non-binary data.
+        (unless (bolp) (insert "\n"))
+        (let ((coding-system-for-write encoding))
+	  (write-region nil nil file))
+        file))))
+
 ;;;###autoload
 (defun org-export-to-file
     (backend file &optional async subtreep visible-only body-only ext-plist
@@ -6939,33 +7037,23 @@ or FILE."
 	    `(let ((output
 		    (org-export-as
 		     ',backend ,subtreep ,visible-only ,body-only
-		     ',ext-plist)))
-	       (with-temp-buffer
-		 (insert output)
-                 ;; Ensure final newline.  This is what was done
-                 ;; historically, when we used `write-file'.
-                 ;; Note that adding a newline is only safe for
-                 ;; non-binary data.
-                 (unless (bolp) (insert "\n"))
-		 (let ((coding-system-for-write ',encoding))
-		   (write-region nil nil ,file)))
-	       (or (ignore-errors (funcall ',post-process ,file)) ,file)))
+		     ',ext-plist))
+                   file)
+               (setq file (org-export--write-output output ',encoding))
+               (let ((post (lambda (f) (or (ignore-errors (funcall ',post-process f)) f))))
+                 (if (listp file) (mapcar post file) (funcall post file)))))
         (let ((output (org-export-as
-                       backend subtreep visible-only body-only ext-plist)))
-          (with-temp-buffer
-            (insert output)
-            ;; Ensure final newline.  This is what was done
-            ;; historically, when we used `write-file'.
-            ;; Note that adding a newline is only safe for
-            ;; non-binary data.
-            (unless (bolp) (insert "\n"))
-            (let ((coding-system-for-write encoding))
-	      (write-region nil nil file)))
+                       backend subtreep visible-only body-only ext-plist))
+              file)
+          (setq file (org-export--write-output output encoding))
           (when (and (org-export--copy-to-kill-ring-p) (org-string-nw-p output))
             (org-kill-new output))
           ;; Get proper return value.
-          (or (and (functionp post-process) (funcall post-process file))
-	      file))))))
+          (let ((post (lambda (f)
+                        (or (and (functionp post-process)
+                                 (funcall post-process f))
+	                    f))))
+            (if (listp file) (mapcar post file) (funcall post file))))))))
 
 (defun org-export-output-file-name (extension &optional subtreep pub-dir)
   "Return output file's name according to buffer specifications.
